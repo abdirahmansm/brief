@@ -18,6 +18,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { upsertUserProfile } from "@/lib/userStore";
 
 interface AuthContextValue {
   user: User | null;
@@ -47,15 +48,44 @@ export function useAuth() {
 
 const googleProvider = new GoogleAuthProvider();
 
+function isVerifiedUser(user: User): boolean {
+  const googleSignIn = user.providerData.some(
+    (provider) => provider.providerId === "google.com"
+  );
+  return user.emailVerified || googleSignIn;
+}
+
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      if (!isVerifiedUser(firebaseUser)) {
+        setPendingVerificationEmail(firebaseUser.email ?? null);
+        setUser(null);
+        setLoading(false);
+        await firebaseSignOut(auth);
+        return;
+      }
+
+      setPendingVerificationEmail(null);
       setUser(firebaseUser);
       setLoading(false);
+
+      // Persist profile metadata for verified users only.
+      try {
+        await upsertUserProfile(firebaseUser);
+      } catch (error) {
+        console.error("Failed to upsert user profile", error);
+      }
     });
     return unsubscribe;
   }, []);
@@ -64,7 +94,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    if (!cred.user.emailVerified) {
+    if (!isVerifiedUser(cred.user)) {
       setPendingVerificationEmail(cred.user.email ?? email);
       await firebaseSignOut(auth);
       throw { code: "auth/email-not-verified" };
@@ -79,7 +109,11 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    const cred = await signInWithPopup(auth, googleProvider);
+    if (!isVerifiedUser(cred.user)) {
+      await firebaseSignOut(auth);
+      throw { code: "auth/email-not-verified" };
+    }
   };
 
   const signOut = async () => {

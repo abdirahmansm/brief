@@ -57,8 +57,10 @@ export interface ResearchSession {
   id: string;
   query: string;
   phase: ResearchPhase;
+  currentStepIndex?: number;
   steps: ResearchStep[];
   sources: Source[];
+  analysisLog?: string[];
   report: Report | null;
   createdAt: Date;
   /** Present when the session was started via a /market command */

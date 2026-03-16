@@ -17,7 +17,6 @@ interface PromptInputProps {
 
 export default function PromptInput({ onSubmit, onMarketingCommand, disabled }: PromptInputProps) {
   const [query, setQuery] = useState("");
-  const [showCommands, setShowCommands] = useState(false);
   const [activeCommand, setActiveCommand] = useState<MarketingCommand | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -34,18 +33,10 @@ export default function PromptInput({ onSubmit, onMarketingCommand, disabled }: 
     }
   }, [query]);
 
-  // Show command menu when typing "/"
-  useEffect(() => {
-    if (isTypingCommand(query) && !activeCommand) {
-      setShowCommands(true);
-    } else if (!query.startsWith("/")) {
-      setShowCommands(false);
-    }
-  }, [query, activeCommand]);
+  const showCommands = isTypingCommand(query) && !activeCommand;
 
   const handleSelectCommand = (cmd: MarketingCommand) => {
     setActiveCommand(cmd);
-    setShowCommands(false);
     setQuery("");
     textareaRef.current?.focus();
   };
@@ -96,7 +87,6 @@ export default function PromptInput({ onSubmit, onMarketingCommand, disabled }: 
     }
     if (e.key === "Escape" && (showCommands || activeCommand)) {
       e.preventDefault();
-      setShowCommands(false);
       if (activeCommand) clearCommand();
     }
     if (e.key === "Backspace" && query === "" && activeCommand) {

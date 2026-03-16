@@ -5,7 +5,12 @@ import PromptInput from "@/components/PromptInput";
 import ResearchProgress from "@/components/ResearchProgress";
 import ReportView from "@/components/ReportView";
 import AuthPage from "@/components/AuthPage";
+import MyFilesSection from "@/components/MyFilesSection";
+import MyNotesSection from "@/components/MyNotesSection";
+import TeamMembersSection from "@/components/TeamMembersSection";
+import GuideSection from "@/components/GuideSection";
 import { useResearch } from "@/hooks/useResearch";
+import { useWorkspaceData } from "@/hooks/useWorkspaceData";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { useState } from "react";
@@ -20,6 +25,8 @@ const SUGGESTIONS = [
 
 const MARKETING_SUGGESTIONS = MARKETING_COMMANDS.slice(0, 6);
 
+type DashboardView = "research" | "files" | "notes" | "team" | "guide";
+
 export default function Dashboard() {
   const { user, loading, signOut } = useAuth();
   const {
@@ -30,14 +37,39 @@ export default function Dashboard() {
     startMarketingCommand,
     newResearch,
     selectSession,
-  } = useResearch();
+  } = useResearch(user);
 
   const handleMarketingCommand = (cmd: MarketingCommand, arg: string) => {
     startMarketingCommand(cmd, arg);
   };
 
+  const {
+    folders,
+    files,
+    notes,
+    teamMembers,
+    loadingFolders,
+    loadingFiles,
+    loadingNotes,
+    loadingTeamMembers,
+    createFolder,
+    uploadFile,
+    deleteFile,
+    createNote,
+    createTeamMember,
+  } = useWorkspaceData(user);
+
   const { theme, toggle } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeView, setActiveView] = useState<DashboardView>("research");
+
+  const navItems: { id: DashboardView; label: string }[] = [
+    { id: "research", label: "Research" },
+    { id: "files", label: "My Files" },
+    { id: "notes", label: "My Notes" },
+    { id: "team", label: "Team Members" },
+    { id: "guide", label: "Guide & FAQ" },
+  ];
 
   if (loading) {
     return (
@@ -64,8 +96,14 @@ export default function Dashboard() {
         <Sidebar
           sessions={sessions}
           activeId={activeId}
-          onSelect={selectSession}
-          onNewResearch={newResearch}
+          onSelect={(id) => {
+            setActiveView("research");
+            selectSession(id);
+          }}
+          onNewResearch={() => {
+            setActiveView("research");
+            newResearch();
+          }}
           onSignOut={signOut}
         />
       )}
@@ -92,9 +130,14 @@ export default function Dashboard() {
                 <path d="M3 12h18M3 6h18M3 18h18" />
               </svg>
             </button>
-            {activeSession && (
+            {activeView === "research" && activeSession && (
               <p className="ml-3 text-sm text-muted truncate">
                 {activeSession.query}
+              </p>
+            )}
+            {activeView !== "research" && (
+              <p className="ml-3 text-sm text-muted truncate">
+                {navItems.find((item) => item.id === activeView)?.label}
               </p>
             )}
           </div>
@@ -116,10 +159,58 @@ export default function Dashboard() {
           </button>
         </header>
 
+        <div className="border-b border-border px-4 py-2">
+          <div className="flex flex-wrap gap-2">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveView(item.id)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                  activeView === item.id
+                    ? "bg-accent/10 text-accent"
+                    : "text-muted hover:bg-surface hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
+          {activeView === "files" && (
+            <MyFilesSection
+              folders={folders}
+              files={files}
+              loadingFolders={loadingFolders}
+              loadingFiles={loadingFiles}
+              onCreateFolder={createFolder}
+              onUploadFile={uploadFile}
+              onDeleteFile={deleteFile}
+            />
+          )}
+
+          {activeView === "notes" && (
+            <MyNotesSection
+              notes={notes}
+              loadingNotes={loadingNotes}
+              onCreateNote={createNote}
+            />
+          )}
+
+          {activeView === "team" && (
+            <TeamMembersSection
+              members={teamMembers}
+              loadingMembers={loadingTeamMembers}
+              onCreateMember={createTeamMember}
+            />
+          )}
+
+          {activeView === "guide" && <GuideSection />}
+
           {/* IDLE STATE — centered prompt */}
-          {isIdle && (
+          {activeView === "research" && isIdle && (
             <div className="flex flex-col items-center justify-center h-full px-6">
               <div className="mb-10 text-center">
                 <h1 className="text-3xl font-semibold text-foreground tracking-tight mb-2">
@@ -165,7 +256,7 @@ export default function Dashboard() {
           )}
 
           {/* WORKING STATE — research progress */}
-          {isWorking && activeSession && (
+          {activeView === "research" && isWorking && activeSession && (
             <div className="max-w-2xl mx-auto px-6 py-10">
               {/* User query bubble */}
               <div className="mb-6">
@@ -193,12 +284,14 @@ export default function Dashboard() {
                 steps={activeSession.steps}
                 sources={activeSession.sources}
                 currentPhase={activeSession.phase}
+                currentStepIndex={activeSession.currentStepIndex}
+                analysisLog={activeSession.analysisLog}
               />
             </div>
           )}
 
           {/* DONE STATE — report */}
-          {isDone && activeSession?.report && (
+          {activeView === "research" && isDone && activeSession?.report && (
             <div className="max-w-2xl mx-auto px-6 py-10">
               <ReportView report={activeSession.report} marketing={activeSession.marketing} />
 

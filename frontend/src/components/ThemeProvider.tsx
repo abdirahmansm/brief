@@ -18,25 +18,26 @@ export default function ThemeProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return "light";
+    }
+    const stored = localStorage.getItem("brief-theme");
+    return stored === "dark" ? "dark" : "light";
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem("brief-theme") as Theme | null;
-    if (stored === "dark") {
-      setTheme("dark");
-      document.documentElement.classList.add("dark");
-    }
-  }, []);
-
-  const toggle = () => {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-    localStorage.setItem("brief-theme", next);
-    if (next === "dark") {
+    if (theme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
+    localStorage.setItem("brief-theme", theme);
+  }, [theme]);
+
+  const toggle = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
   };
 
   return (

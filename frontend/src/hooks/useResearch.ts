@@ -1,64 +1,25 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { User } from "firebase/auth";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
 import {
   ResearchSession,
   ResearchStep,
-  Source,
   ResearchPhase,
-  Report,
   MarketingMeta,
   AuditScore,
 } from "@/types/research";
 import { MarketingCommand } from "@/lib/marketingSkills";
-
-// Demo data for preview — will be replaced by real API calls
-const MOCK_SOURCES: Source[] = [
-  { title: "Global Startup Funding Trends 2025", url: "#", domain: "CB Insights" },
-  { title: "Venture Capital Outlook Report", url: "#", domain: "Crunchbase" },
-  { title: "Emerging Tech Landscape 2025", url: "#", domain: "TechCrunch" },
-  { title: "Patent Activity Tracker", url: "#", domain: "WIPO" },
-  { title: "Consumer Sentiment & Social Data", url: "#", domain: "X (Twitter)" },
-  { title: "AI Startup Ecosystem Index", url: "#", domain: "PitchBook" },
-];
-
-function buildMockReport(query: string): Report {
-  return {
-    id: crypto.randomUUID(),
-    query,
-    overview:
-      "Based on analysis of 6 sources, here are the key findings for your research query. The market shows strong growth signals with several emerging opportunities and notable competitive dynamics.",
-    sections: [
-      {
-        title: "Market Overview",
-        content:
-          "The market is experiencing rapid transformation driven by technological advances and shifting consumer preferences. Total addressable market is estimated at $XX billion with a CAGR of XX% through 2028. Key drivers include digital transformation, AI adoption, and changing regulatory landscapes.",
-      },
-      {
-        title: "Key Competitors",
-        content:
-          "• Company A — Market leader with 25% share, strong in enterprise segment\n• Company B — Fast-growing challenger, focus on SMB market\n• Company C — Niche player with deep vertical expertise\n• Company D — Recent entrant backed by significant VC funding",
-      },
-      {
-        title: "Customer Pain Points",
-        content:
-          "Analysis of forums, reviews, and social media reveals recurring themes:\n\n1. Complexity of existing solutions — users want simpler workflows\n2. Pricing transparency — hidden fees and unclear tier structures\n3. Integration gaps — difficulty connecting with existing tool stacks\n4. Support responsiveness — long resolution times for critical issues",
-      },
-      {
-        title: "Emerging Trends",
-        content:
-          "• AI-native tools replacing traditional SaaS approaches\n• Consolidation through M&A activity accelerating\n• Open-source alternatives gaining enterprise traction\n• Vertical-specific solutions outperforming horizontal platforms",
-      },
-      {
-        title: "Market Gaps & Opportunities",
-        content:
-          "Several underserved segments present opportunities:\n\n1. Mid-market companies ($10M-$100M revenue) lack tailored solutions\n2. Cross-border/multi-currency workflows remain fragmented\n3. Real-time analytics and predictive insights are underdelivered\n4. Developer experience is a competitive moat few are investing in",
-      },
-    ],
-    sources: MOCK_SOURCES,
-    createdAt: new Date(),
-  };
-}
+import { db } from "@/lib/firebase";
 
 const STEPS: ResearchStep[] = [
   { phase: "searching", label: "Searching the web", detail: "Collecting the latest reports, articles, and market data." },
@@ -67,38 +28,391 @@ const STEPS: ResearchStep[] = [
   { phase: "finished", label: "Finished" },
 ];
 
-export function useResearch() {
+interface ResearchApiResponse {
+  report: {
+    id: string;
+    query: string;
+    overview: string;
+    sections: Array<{ title: string; content: string }>;
+    sources: Array<{ title: string; url: string; domain: string; favicon?: string }>;
+    createdAt: string;
+  };
+  scores?: AuditScore[];
+  overallScore?: number;
+  grade?: string;
+  error?: string;
+}
+
+interface SerializedResearchSession {
+  id: string;
+  query: string;
+  phase: ResearchPhase;
+  currentStepIndex?: number;
+  steps: ResearchStep[];
+  sources: Array<{ title: string; url: string; domain: string; favicon?: string }>;
+  analysisLog?: string[];
+  report: {
+    id: string;
+    query: string;
+    overview: string;
+    sections: Array<{ title: string; content: string }>;
+    sources: Array<{ title: string; url: string; domain: string; favicon?: string }>;
+    createdAtIso: string;
+  } | null;
+  marketing?: {
+    commandId: string;
+    commandLabel: string;
+    icon: string;
+    inputType: "url" | "topic" | "client" | "product";
+    arg: string;
+    outputFile: string;
+    scores?: AuditScore[];
+    overallScore?: number;
+    grade?: string;
+  };
+  createdAtIso: string;
+}
+
+function timestampToDate(value: unknown): Date | null {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate: () => Date }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  return null;
+}
+
+function serializeSession(session: ResearchSession): SerializedResearchSession {
+  return {
+    id: session.id,
+    query: session.query,
+    phase: session.phase,
+    currentStepIndex: session.currentStepIndex,
+    steps: session.steps,
+    sources: session.sources,
+    analysisLog: session.analysisLog || [],
+    report: session.report
+      ? {
+          ...session.report,
+          createdAtIso: session.report.createdAt.toISOString(),
+        }
+      : null,
+    marketing: session.marketing
+      ? {
+          commandId: session.marketing.commandId,
+          commandLabel: session.marketing.commandLabel,
+          icon: session.marketing.icon,
+          inputType: session.marketing.inputType,
+          arg: session.marketing.arg,
+          outputFile: session.marketing.outputFile,
+          ...(session.marketing.scores ? { scores: session.marketing.scores } : {}),
+          ...(typeof session.marketing.overallScore === "number"
+            ? { overallScore: session.marketing.overallScore }
+            : {}),
+          ...(session.marketing.grade ? { grade: session.marketing.grade } : {}),
+        }
+      : undefined,
+    createdAtIso: session.createdAt.toISOString(),
+  };
+}
+
+function deserializeSession(data: Record<string, unknown>, fallbackId: string): ResearchSession {
+  const createdAtFromTimestamp = timestampToDate(data.createdAt);
+  const createdAtIso = typeof data.createdAtIso === "string" ? data.createdAtIso : undefined;
+  const createdAt = createdAtIso
+    ? new Date(createdAtIso)
+    : createdAtFromTimestamp || new Date();
+
+  const reportData = data.report as SerializedResearchSession["report"] | null | undefined;
+  const report = reportData
+    ? {
+        id: reportData.id,
+        query: reportData.query,
+        overview: reportData.overview,
+        sections: reportData.sections,
+        sources: reportData.sources,
+        createdAt: new Date(reportData.createdAtIso),
+      }
+    : null;
+
+  return {
+    id: typeof data.id === "string" ? data.id : fallbackId,
+    query: String(data.query || ""),
+    phase: (data.phase as ResearchPhase) || "searching",
+    currentStepIndex:
+      typeof data.currentStepIndex === "number" ? data.currentStepIndex : undefined,
+    steps: (data.steps as ResearchStep[]) || STEPS,
+    sources:
+      (data.sources as Array<{ title: string; url: string; domain: string; favicon?: string }>) ||
+      [],
+    analysisLog: (data.analysisLog as string[] | undefined) || [],
+    report,
+    createdAt,
+    marketing: (data.marketing as MarketingMeta | undefined) || undefined,
+  };
+}
+
+async function persistSession(
+  uid: string,
+  session: ResearchSession,
+  isNew: boolean
+): Promise<void> {
+  const ref = doc(db, "users", uid, "researchSessions", session.id);
+  const serialized = serializeSession(session);
+
+  await setDoc(
+    ref,
+    {
+      ...serialized,
+      ...(isNew ? { createdAt: serverTimestamp() } : {}),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function runResearchRequest(payload: {
+  query: string;
+  commandId?: string;
+  commandArg?: string;
+}): Promise<ResearchApiResponse> {
+  const response = await fetch("/api/research", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await response.json()) as ResearchApiResponse;
+  if (!response.ok) {
+    throw new Error(data.error || "Research request failed.");
+  }
+  return data;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function nowLabel(): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+async function typeByLine(
+  input: string,
+  onTick: (value: string) => void,
+  charChunk = 8,
+  tickDelayMs = 26,
+  lineDelayMs = 48
+): Promise<void> {
+  const lines = input.split("\n");
+  let built = "";
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+
+    for (let i = 0; i < line.length; i += charChunk) {
+      built += line.slice(i, i + charChunk);
+      onTick(built);
+      await sleep(tickDelayMs);
+    }
+
+    if (lineIndex < lines.length - 1) {
+      built += "\n";
+      onTick(built);
+      await sleep(lineDelayMs);
+    }
+  }
+}
+
+export function useResearch(user: User | null) {
+  const uid = user?.uid ?? null;
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const sessionsRef = useRef<ResearchSession[]>([]);
 
-  const activeSession = sessions.find((s) => s.id === activeId) ?? null;
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
-  const clearTimers = useCallback(() => {
-    timerRef.current.forEach(clearTimeout);
-    timerRef.current = [];
-  }, []);
+  useEffect(() => {
+    if (!uid) return;
+
+    const q = query(
+      collection(db, "users", uid, "researchSessions"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const hydrated = snapshot.docs.map((item) =>
+        deserializeSession(item.data() as Record<string, unknown>, item.id)
+      );
+
+      setSessions(hydrated);
+      setActiveId((prev) => {
+        if (!prev) return hydrated[0]?.id || null;
+        return hydrated.some((session) => session.id === prev)
+          ? prev
+          : hydrated[0]?.id || null;
+      });
+    });
+
+    return unsubscribe;
+  }, [uid]);
+
+  const visibleSessions = uid ? sessions : [];
+  const visibleActiveSession = visibleSessions.find((s) => s.id === activeId) ?? null;
 
   const updateSession = useCallback(
-    (id: string, update: Partial<ResearchSession>) => {
+    (id: string, update: Partial<ResearchSession>, persist = false) => {
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...update } : s))
       );
+
+      if (persist && uid) {
+        const current = sessionsRef.current.find((item) => item.id === id);
+        if (current) {
+          const merged = { ...current, ...update };
+          void persistSession(uid, merged, false);
+        }
+      }
     },
-    []
+    [uid]
+  );
+
+  const appendLog = useCallback(
+    (id: string, message: string, persist = false) => {
+      const current = sessionsRef.current.find((item) => item.id === id);
+      const nextLog = [...(current?.analysisLog || []), `[${nowLabel()}] ${message}`];
+      updateSession(
+        id,
+        {
+          analysisLog: nextLog,
+        },
+        persist
+      );
+    },
+    [updateSession]
+  );
+
+  const progressToStep = useCallback(
+    (id: string, steps: ResearchStep[], stepIndex: number) => {
+      const safeIndex = Math.max(0, Math.min(stepIndex, steps.length - 1));
+      const step = steps[safeIndex];
+      updateSession(id, {
+        currentStepIndex: safeIndex,
+        phase: step.phase,
+      });
+    },
+    [updateSession]
+  );
+
+  const streamReportOutput = useCallback(
+    async (
+      id: string,
+      report: ResearchApiResponse["report"],
+      marketing?: MarketingMeta,
+      finalScores?: AuditScore[],
+      finalOverallScore?: number,
+      finalGrade?: string
+    ) => {
+      const createdAt = new Date(report.createdAt);
+      const skeletonReport = {
+        id: report.id,
+        query: report.query,
+        overview: "",
+        sections: [] as Array<{ title: string; content: string }>,
+        sources: report.sources,
+        createdAt,
+      };
+
+      updateSession(id, {
+        phase: "finished",
+        report: skeletonReport,
+      });
+      appendLog(id, "Drafting executive summary...");
+
+      let liveOverview = "";
+
+      await typeByLine(report.overview, (value) => {
+        liveOverview = value;
+        updateSession(id, {
+          report: {
+            ...skeletonReport,
+            overview: liveOverview,
+            sections: [...skeletonReport.sections],
+          },
+        });
+      });
+
+      const liveSections: Array<{ title: string; content: string }> = [];
+      for (let sectionIndex = 0; sectionIndex < report.sections.length; sectionIndex += 1) {
+        const fullSection = report.sections[sectionIndex];
+        appendLog(id, `Drafting section: ${fullSection.title}`);
+        liveSections.push({ title: fullSection.title, content: "" });
+
+        await typeByLine(fullSection.content, (value) => {
+          liveSections[sectionIndex] = {
+            title: fullSection.title,
+            content: value,
+          };
+          updateSession(id, {
+            report: {
+              ...skeletonReport,
+              overview: liveOverview,
+              sections: [...liveSections],
+            },
+          });
+        });
+        appendLog(id, `Completed section: ${fullSection.title}`);
+      }
+
+      appendLog(id, "Finalizing report output.", true);
+      updateSession(
+        id,
+        {
+          phase: "finished",
+          report: {
+            ...report,
+            createdAt,
+          },
+          ...(marketing
+            ? {
+                marketing: {
+                  ...marketing,
+                  scores: finalScores,
+                  overallScore: finalOverallScore,
+                  grade: finalGrade,
+                },
+              }
+            : {}),
+        },
+        true
+      );
+    },
+    [appendLog, updateSession]
   );
 
   const startResearch = useCallback(
-    (query: string) => {
-      clearTimers();
-
+    async (query: string) => {
       const id = crypto.randomUUID();
       const newSession: ResearchSession = {
         id,
         query,
         phase: "searching",
+        currentStepIndex: 0,
         steps: STEPS,
         sources: [],
+        analysisLog: [],
         report: null,
         createdAt: new Date(),
       };
@@ -106,31 +420,70 @@ export function useResearch() {
       setSessions((prev) => [newSession, ...prev]);
       setActiveId(id);
 
-      // Simulate phased research flow
-      const t1 = setTimeout(() => {
-        updateSession(id, { phase: "reviewing", sources: MOCK_SOURCES });
-      }, 2000);
+      if (uid) {
+        void persistSession(uid, newSession, true);
+      }
 
-      const t2 = setTimeout(() => {
-        updateSession(id, { phase: "analyzing" });
-      }, 4000);
+      appendLog(id, `Research request started for: ${query}`);
 
-      const t3 = setTimeout(() => {
+      try {
+        const requestPromise = runResearchRequest({ query });
+
+        await sleep(1200);
+        progressToStep(id, STEPS, 1);
+        appendLog(id, "Scanning live web sources and gathering citations...");
+
+        const data = await requestPromise;
+
+        updateSession(id, {
+          phase: "reviewing",
+          currentStepIndex: 1,
+          sources: data.report.sources,
+        });
+        appendLog(id, `Collected ${data.report.sources.length} sources. Reviewing relevance and signal quality.`);
+
+        await sleep(1400);
+        progressToStep(id, STEPS, 2);
+        appendLog(id, "Synthesizing evidence into market insights and structured sections...");
+
+        await sleep(900);
+        progressToStep(id, STEPS, 3);
+        appendLog(id, "Preparing final report stream for display...");
+
+        await streamReportOutput(id, data.report);
+
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Research failed. Please try again.";
         updateSession(id, {
           phase: "finished",
-          report: buildMockReport(query),
-        });
-      }, 6000);
-
-      timerRef.current = [t1, t2, t3];
+          currentStepIndex: 3,
+          analysisLog: [
+            ...((sessionsRef.current.find((item) => item.id === id)?.analysisLog || [])),
+            `[${nowLabel()}] Research failed before report completion.`,
+          ],
+          report: {
+            id: crypto.randomUUID(),
+            query,
+            overview: "The request failed before the report could be generated.",
+            sections: [
+              {
+                title: "Error",
+                content: message,
+              },
+            ],
+            sources: [],
+            createdAt: new Date(),
+          },
+        }, true);
+      }
     },
-    [clearTimers, updateSession]
+    [uid, appendLog, progressToStep, streamReportOutput, updateSession]
   );
 
   const newResearch = useCallback(() => {
-    clearTimers();
     setActiveId(null);
-  }, [clearTimers]);
+  }, []);
 
   const selectSession = useCallback((id: string) => {
     setActiveId(id);
@@ -138,17 +491,18 @@ export function useResearch() {
 
   /** Start a marketing command session (e.g., /market audit https://...) */
   const startMarketingCommand = useCallback(
-    (command: MarketingCommand, arg: string) => {
-      clearTimers();
-
+    async (command: MarketingCommand, arg: string) => {
       const id = crypto.randomUUID();
 
       // Build steps from the command's phases
       const marketingSteps: ResearchStep[] = command.phases.map((label, i) => {
-        const phaseMap: ResearchPhase[] = ["searching", "reviewing", "analyzing"];
-        const phase = i < command.phases.length - 1
-          ? phaseMap[Math.min(i, phaseMap.length - 1)]
-          : "finished";
+        if (i === command.phases.length - 1) {
+          return { phase: "finished", label };
+        }
+
+        const ratio = command.phases.length <= 2 ? 0 : i / (command.phases.length - 1);
+        const phase: ResearchPhase =
+          ratio < 0.34 ? "searching" : ratio < 0.67 ? "reviewing" : "analyzing";
         return { phase, label };
       });
 
@@ -165,8 +519,10 @@ export function useResearch() {
         id,
         query: `${command.command} ${arg}`,
         phase: "searching",
+        currentStepIndex: 0,
         steps: marketingSteps,
         sources: [],
+        analysisLog: [],
         report: null,
         createdAt: new Date(),
         marketing,
@@ -175,121 +531,80 @@ export function useResearch() {
       setSessions((prev) => [newSession, ...prev]);
       setActiveId(id);
 
-      // Simulate phased marketing analysis flow
-      const t1 = setTimeout(() => {
-        updateSession(id, { phase: "reviewing", sources: MOCK_SOURCES });
-      }, 2500);
+      if (uid) {
+        void persistSession(uid, newSession, true);
+      }
 
-      const t2 = setTimeout(() => {
-        updateSession(id, { phase: "analyzing" });
-      }, 5000);
+      appendLog(id, `Started ${command.command} with target: ${arg}`);
 
-      const t3 = setTimeout(() => {
-        // Build mock audit scores for audit commands
-        const scores: AuditScore[] = command.id === "audit"
-          ? [
-              { category: "Content & Messaging", score: 72, weight: 25, finding: "Headlines need more specificity and urgency" },
-              { category: "Conversion Optimization", score: 58, weight: 20, finding: "CTAs lack contrast and urgency; forms have too many fields" },
-              { category: "SEO & Discoverability", score: 81, weight: 20, finding: "Strong technical SEO; missing long-tail content opportunities" },
-              { category: "Competitive Positioning", score: 64, weight: 15, finding: "No comparison or alternatives pages; differentiation unclear" },
-              { category: "Brand & Trust", score: 76, weight: 10, finding: "Good trust signals; team page could be stronger" },
-              { category: "Growth & Strategy", score: 61, weight: 10, finding: "Limited referral/viral loops; pricing page needs optimization" },
-            ]
-          : [];
+      try {
+        const dataPromise = runResearchRequest({
+          query: arg,
+          commandId: command.id,
+          commandArg: arg,
+        });
 
-        const overallScore = scores.length > 0
-          ? Math.round(scores.reduce((acc, s) => acc + s.score * (s.weight / 100), 0))
-          : undefined;
+        for (let index = 1; index < Math.max(marketingSteps.length - 1, 1); index += 1) {
+          await sleep(1000);
+          progressToStep(id, marketingSteps, index);
+          appendLog(id, `Step ${index + 1}/${marketingSteps.length}: ${marketingSteps[index].label}`);
+        }
 
-        const grade = overallScore
-          ? overallScore >= 85 ? "A" : overallScore >= 70 ? "B" : overallScore >= 55 ? "C" : overallScore >= 40 ? "D" : "F"
-          : undefined;
-
-        const report = buildMockMarketingReport(command, arg, scores, overallScore, grade);
+        const data = await dataPromise;
 
         updateSession(id, {
-          phase: "finished",
-          report,
-          marketing: { ...marketing, scores, overallScore, grade },
+          phase: marketingSteps[Math.max(marketingSteps.length - 2, 0)]?.phase || "reviewing",
+          currentStepIndex: Math.max(marketingSteps.length - 2, 0),
+          sources: data.report.sources,
         });
-      }, 7000);
+        appendLog(id, `Command research gathered ${data.report.sources.length} sources for deep analysis.`);
 
-      timerRef.current = [t1, t2, t3];
+        await sleep(900);
+        progressToStep(id, marketingSteps, marketingSteps.length - 1);
+        appendLog(id, "Converting research into command-specific strategy output...");
+
+        await streamReportOutput(
+          id,
+          data.report,
+          marketing,
+          data.scores,
+          data.overallScore,
+          data.grade
+        );
+
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Marketing analysis failed.";
+        appendLog(id, `Command failed: ${message}`);
+        updateSession(id, {
+          phase: "finished",
+          currentStepIndex: Math.max(marketingSteps.length - 1, 0),
+          report: {
+            id: crypto.randomUUID(),
+            query: `${command.command} ${arg}`,
+            overview: `${command.label} could not be completed.`,
+            sections: [
+              {
+                title: "Error",
+                content: message,
+              },
+            ],
+            sources: [],
+            createdAt: new Date(),
+          },
+        }, true);
+      }
     },
-    [clearTimers, updateSession]
+    [uid, appendLog, progressToStep, streamReportOutput, updateSession]
   );
 
   return {
-    sessions,
-    activeSession,
+    sessions: visibleSessions,
+    activeSession: visibleActiveSession,
     activeId,
     startResearch,
     startMarketingCommand,
     newResearch,
     selectSession,
-  };
-}
-
-/** Build a mock report for a marketing command */
-function buildMockMarketingReport(
-  command: MarketingCommand,
-  arg: string,
-  scores: AuditScore[],
-  overallScore?: number,
-  grade?: string,
-): Report {
-  const baseOverview = overallScore
-    ? `Marketing audit complete for ${arg}. Overall Marketing Score: ${overallScore}/100 (Grade: ${grade}). Analysis covered 6 key dimensions across content, conversion, SEO, competitive positioning, brand trust, and growth strategy.`
-    : `${command.label} analysis complete for "${arg}". Based on comprehensive analysis of the target and 6 verified sources, here are the key findings and actionable recommendations.`;
-
-  const sections = scores.length > 0
-    ? [
-        {
-          title: "Score Breakdown",
-          content: scores.map((s) => `${s.category}: ${s.score}/100 (${s.weight}% weight)\n  → ${s.finding}`).join("\n\n"),
-        },
-        {
-          title: "Quick Wins (This Week)",
-          content: "1. Rewrite primary headline with specific outcome and timeframe\n2. Add urgency text near all CTAs ('Start free trial — no credit card required')\n3. Add customer testimonials directly above pricing section\n4. Fix 3 missing meta descriptions on key landing pages\n5. Add exit-intent popup with lead magnet on blog pages",
-        },
-        {
-          title: "Strategic Recommendations (This Month)",
-          content: "1. Redesign pricing page with value framing, social proof anchoring, and recommended plan highlight\n2. Create 3 competitor comparison pages targeting '[brand] vs [competitor]' search queries\n3. Build a 5-email welcome sequence for new trial signups\n4. Implement A/B testing on homepage headline and CTA button copy",
-        },
-        {
-          title: "Long-Term Initiatives (This Quarter)",
-          content: "1. Launch content marketing campaign targeting 20 high-intent keywords in your niche\n2. Build referral program with double-sided incentives\n3. Redesign onboarding flow to reduce time-to-value for new users",
-        },
-        {
-          title: "Revenue Impact Summary",
-          content: "Implementing all recommendations could yield an estimated $8,000–$15,000/month in additional revenue based on current traffic levels and industry conversion benchmarks.",
-        },
-      ]
-    : [
-        {
-          title: "Executive Summary",
-          content: `Comprehensive ${command.label.toLowerCase()} analysis has been completed. The findings reveal several actionable opportunities for improvement and growth.`,
-        },
-        {
-          title: "Key Findings",
-          content: "1. Strong foundation in core areas with room for targeted optimization\n2. Several quick wins identified that can be implemented immediately\n3. Competitive landscape shows opportunities for differentiation\n4. Content strategy can be enhanced to capture more organic traffic",
-        },
-        {
-          title: "Recommendations",
-          content: "1. Optimize primary conversion paths with clearer CTAs and reduced friction\n2. Strengthen messaging with specific, outcome-driven language\n3. Build content assets targeting high-intent search queries\n4. Implement tracking and A/B testing for data-driven iterations",
-        },
-        {
-          title: "Next Steps",
-          content: `1. Review the detailed analysis in ${command.outputFile || "the report"}\n2. Prioritize quick wins for immediate implementation\n3. Schedule strategic initiatives for this month\n4. Consider follow-up analyses: /market copy, /market funnel, /market competitors`,
-        },
-      ];
-
-  return {
-    id: crypto.randomUUID(),
-    query: `${command.command} ${arg}`,
-    overview: baseOverview,
-    sections,
-    sources: MOCK_SOURCES,
-    createdAt: new Date(),
   };
 }

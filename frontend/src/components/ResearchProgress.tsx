@@ -6,6 +6,8 @@ interface ResearchProgressProps {
   steps: ResearchStep[];
   sources: Source[];
   currentPhase: ResearchPhase;
+  currentStepIndex?: number;
+  analysisLog?: string[];
 }
 
 function PhaseIcon({ phase, isActive }: { phase: ResearchPhase; isActive: boolean }) {
@@ -54,6 +56,8 @@ export default function ResearchProgress({
   steps,
   sources,
   currentPhase,
+  currentStepIndex,
+  analysisLog = [],
 }: ResearchProgressProps) {
   return (
     <div className="w-full max-w-2xl mx-auto animate-fade-in">
@@ -74,8 +78,14 @@ export default function ResearchProgress({
         {/* Steps timeline */}
         <div className="space-y-1">
           {steps.map((step, idx) => {
-            const completed = isPhaseCompleted(step.phase, currentPhase);
-            const active = step.phase === currentPhase;
+            const completed =
+              typeof currentStepIndex === "number"
+                ? idx < currentStepIndex
+                : isPhaseCompleted(step.phase, currentPhase);
+            const active =
+              typeof currentStepIndex === "number"
+                ? idx === currentStepIndex
+                : step.phase === currentPhase;
             return (
               <div
                 key={idx}
@@ -150,6 +160,27 @@ export default function ResearchProgress({
             );
           })}
         </div>
+      </div>
+
+      {/* Live analysis log */}
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Live Analysis Log
+          </h3>
+          <span className="text-[11px] text-muted">{analysisLog.length}</span>
+        </div>
+        {analysisLog.length === 0 ? (
+          <p className="text-xs text-muted">No analysis events yet.</p>
+        ) : (
+          <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-xl border border-border bg-surface/60 p-3">
+            {analysisLog.map((entry, idx) => (
+              <p key={`${idx}-${entry.slice(0, 14)}`} className="text-xs text-foreground/90">
+                {entry}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

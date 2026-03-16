@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Report, MarketingMeta } from "@/types/research";
 
 interface ReportViewProps {
@@ -8,6 +9,56 @@ interface ReportViewProps {
 }
 
 export default function ReportView({ report, marketing }: ReportViewProps) {
+  const [exporting, setExporting] = useState<"md" | "html" | "pdf" | null>(null);
+  const [exportError, setExportError] = useState("");
+
+  const exportReport = async (format: "md" | "html" | "pdf") => {
+    setExportError("");
+    setExporting(format);
+
+    try {
+      const response = await fetch("/api/research/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          report: {
+            ...report,
+            createdAt: report.createdAt.toISOString(),
+          },
+          scores: marketing?.scores,
+          overallScore: marketing?.overallScore,
+          grade: marketing?.grade,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error || "Export failed.");
+      }
+
+      const blob = await response.blob();
+      const fileNameBase = report.query
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "brief-report";
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileNameBase}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto animate-fade-in">
       {/* Report header */}
@@ -33,6 +84,30 @@ export default function ReportView({ report, marketing }: ReportViewProps) {
         <h1 className="text-2xl font-semibold text-foreground leading-tight">
           {report.query}
         </h1>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => exportReport("md")}
+            disabled={!!exporting}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+          >
+            {exporting === "md" ? "Exporting..." : "Export .md"}
+          </button>
+          <button
+            onClick={() => exportReport("html")}
+            disabled={!!exporting}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+          >
+            {exporting === "html" ? "Exporting..." : "Export .html"}
+          </button>
+          <button
+            onClick={() => exportReport("pdf")}
+            disabled={!!exporting}
+            className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+          >
+            {exporting === "pdf" ? "Exporting..." : "Export .pdf"}
+          </button>
+        </div>
+        {exportError && <p className="mt-2 text-xs text-red-500">{exportError}</p>}
       </div>
 
       {/* Marketing Score Card */}

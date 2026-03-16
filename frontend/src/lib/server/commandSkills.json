@@ -1,0 +1,80 @@
+{
+  "globalPreflight": [
+    "State assumptions explicitly and keep them testable.",
+    "Prefer sourced claims over speculation; cite supporting sources in sections.",
+    "Use structured outputs with actionability, impact, and confidence qualifiers.",
+    "Differentiate signal from noise by emphasizing recurring patterns across sources.",
+    "Avoid generic marketing filler; prioritize operator-grade recommendations."
+  ],
+  "globalPostflight": [
+    "Ensure every section answers: so what, why now, and what to do next.",
+    "Remove contradictions and duplicated recommendations.",
+    "Use concise bullets and prioritization labels when appropriate.",
+    "Preserve uncertainty where evidence is weak instead of overclaiming."
+  ],
+  "commands": {
+    "audit": {
+      "pre": [
+        "Score categories with clear evidence-backed reasoning.",
+        "Balance strategic and tactical findings in each category."
+      ],
+      "post": [
+        "Validate weighted score coherence and provide top priorities by impact."
+      ]
+    },
+    "sizing": {
+      "pre": [
+        "Use explicit TAM/SAM/SOM assumptions and scenario ranges (base, upside, downside).",
+        "Favor transparent derivation over false precision."
+      ],
+      "post": [
+        "Flag assumptions that need primary validation interviews or customer data."
+      ]
+    },
+    "segments": {
+      "pre": [
+        "Segment by jobs-to-be-done, buying trigger, and budget authority.",
+        "Describe each segment's pain intensity and urgency."
+      ],
+      "post": [
+        "Rank segments by attractiveness, accessibility, and monetization potential."
+      ]
+    },
+    "demand": {
+      "pre": [
+        "Triangulate demand from search, communities, hiring, and ecosystem activity.",
+        "Distinguish curiosity from purchase intent signals."
+      ],
+      "post": [
+        "Return a demand verdict with confidence level and leading indicators to track."
+      ]
+    },
+    "landscape": {
+      "pre": [
+        "Map value chain roles and substitution patterns, not only direct competitors.",
+        "Show where power and margin concentrate in the ecosystem."
+      ],
+      "post": [
+        "Highlight strategic entry points and defensibility risks."
+      ]
+    },
+    "whitespace": {
+      "pre": [
+        "Identify underserved niches where pain is high and incumbent fit is low.",
+        "Score opportunities on urgency, willingness-to-pay, and ease-of-entry."
+      ],
+      "post": [
+        "Provide top opportunity bets with rationale and first experiments."
+      ]
+    },
+    "regulatory": {
+      "pre": [
+        "Map region-specific compliance obligations and launch blockers.",
+        "Separate legal certainty from likely policy direction."
+      ],
+      "post": [
+        "Provide mitigation actions, sequencing advice, and residual risk summary."
+      ]
+    }
+  }
+}
