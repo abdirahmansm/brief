@@ -8,6 +8,7 @@ interface SidebarProps {
   sessions: ResearchSession[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onDeleteSession: (id: string) => Promise<void>;
   onNewResearch: () => void;
   onSignOut?: () => void;
 }
@@ -16,6 +17,7 @@ export default function Sidebar({
   sessions,
   activeId,
   onSelect,
+  onDeleteSession,
   onNewResearch,
   onSignOut,
 }: SidebarProps) {
@@ -60,20 +62,45 @@ export default function Sidebar({
         )}
         <div className="space-y-0.5">
           {sessions.map((session) => (
-            <button
+            <div
               key={session.id}
-              onClick={() => onSelect(session.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm truncate cursor-pointer ${
+              className={`group flex items-center gap-1 rounded-xl ${
                 session.id === activeId
-                  ? "bg-accent/10 text-accent font-medium"
-                  : "text-muted hover:bg-surface hover:text-foreground"
+                  ? "bg-accent/10"
+                  : "hover:bg-surface"
               }`}
             >
-              {session.marketing && (
-                <span className="mr-1.5">{session.marketing.icon}</span>
-              )}
-              {session.query}
-            </button>
+              <button
+                onClick={() => onSelect(session.id)}
+                className={`min-w-0 flex-1 text-left px-3 py-2.5 rounded-xl text-sm truncate cursor-pointer ${
+                  session.id === activeId
+                    ? "text-accent font-medium"
+                    : "text-muted group-hover:text-foreground"
+                }`}
+              >
+                {session.marketing && (
+                  <span className="mr-1.5">{session.marketing.icon}</span>
+                )}
+                {session.query}
+              </button>
+              <button
+                onClick={async (event) => {
+                  event.stopPropagation();
+                  await onDeleteSession(session.id);
+                }}
+                className="mr-2 flex h-7 w-7 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-card hover:text-foreground group-hover:opacity-100"
+                aria-label="Delete research session"
+                title="Delete session"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                </svg>
+              </button>
+            </div>
           ))}
         </div>
       </div>

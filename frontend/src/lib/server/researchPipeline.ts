@@ -60,6 +60,55 @@ interface RunResearchResult {
   artifacts: ReportArtifacts;
 }
 
+const CONVERSATIONAL_PATTERNS: RegExp[] = [
+  /^(hi|hello|hey|yo|sup)\b/i,
+  /\b(how are you|who are you|what can you do)\b/i,
+  /\b(thanks|thank you|thx)\b/i,
+  /\b(help|assist me|show commands)\b/i,
+  /\b(good morning|good afternoon|good evening)\b/i,
+];
+
+const RESEARCH_INTENT_PATTERNS: RegExp[] = [
+  /\bmarket\b/i,
+  /\bcompetitor(s)?\b/i,
+  /\btrend(s)?\b/i,
+  /\bresearch\b/i,
+  /\banaly(s|z)e|analysis\b/i,
+  /\breport\b/i,
+  /\bcustomer(s)?\b/i,
+  /\bpain\s?point(s)?\b/i,
+  /\bpricing\b/i,
+  /\bseo\b/i,
+  /\bfunnel\b/i,
+  /\bdemand\b/i,
+  /\bsegment(s|ation)?\b/i,
+  /\btam|sam|som\b/i,
+  /\bopportunit(y|ies)\b/i,
+  /\breview(s)?\b/i,
+  /\bcomplaint(s)?\b/i,
+  /\breliab(le|ility)\b/i,
+  /\bamazon\b/i,
+  /https?:\/\//i,
+];
+
+const BRIEF_HELP_PATTERNS: RegExp[] = [
+  /\bcommand(s)?\b/i,
+  /\bhow (can|do) i use\b/i,
+  /\bwhat can (you|brief) do\b/i,
+  /\bhow does (this|brief) work\b/i,
+  /\bshow (me )?(the )?commands\b/i,
+  /\bwhich command(s)?\b/i,
+  /\bhelp me use\b/i,
+  /\bto my benefit\b/i,
+];
+
+type NonCommandIntent =
+  | "greeting"
+  | "gratitude"
+  | "help"
+  | "research-request"
+  | "general";
+
 function extractJsonBlock(raw: string): string {
   const fenced = raw.match(/```json\s*([\s\S]*?)```/i);
   if (fenced?.[1]) return fenced[1].trim();
@@ -118,6 +167,122 @@ function getCommandSkill(commandId?: string): CommandSkillBlock | null {
   if (!commandId) return null;
   const blocks = commandSkills.commands as Record<string, CommandSkillBlock>;
   return blocks[commandId] || null;
+}
+
+function classifyNonCommandIntent(query: string): NonCommandIntent {
+  const normalized = query.trim().toLowerCase();
+
+  if (!normalized) return "help";
+  if (CONVERSATIONAL_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    if (/\b(thanks|thank you|thx)\b/i.test(normalized)) return "gratitude";
+    if (/^(hi|hello|hey|yo|sup)\b/i.test(normalized)) return "greeting";
+    return "help";
+  }
+
+  if (BRIEF_HELP_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "help";
+  }
+
+  if (RESEARCH_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "research-request";
+  }
+
+  return "general";
+}
+
+function recommendCommands(query: string, max = 5): Array<{ usage: string; why: string }> {
+  const tokens = new Set(
+    query
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean)
+  );
+
+  const ranked = MARKETING_COMMANDS.map((command) => {
+    const haystack = [
+      command.command,
+      command.label,
+      command.description,
+      command.category,
+      command.inputType,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    let score = 0;
+    tokens.forEach((token) => {
+      if (token.length > 2 && haystack.includes(token)) score += 1;
+    });
+
+    if (/\bseo\b/i.test(query) && command.id === "seo") score += 3;
+    if (/\bcompetitor(s)?\b/i.test(query) && command.id === "competitors") score += 3;
+    if (/\baudit\b/i.test(query) && command.id === "audit") score += 3;
+    if (/\breport\b/i.test(query) && command.id === "report") score += 3;
+    if (/\bdemand|trend|market\b/i.test(query) && command.id === "demand") score += 2;
+
+    return { command, score };
+  })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map(({ command }) => ({
+      usage: `${command.command} <${command.inputType}>`,
+      why: command.description,
+    }));
+
+  return ranked.length
+    ? ranked
+    : [
+        { usage: "/market quick <url>", why: "Fast snapshot of messaging, CTA, and trust signals." },
+        { usage: "/market audit <url>", why: "Deep full-stack marketing audit with weighted scoring." },
+        { usage: "/market competitors <url>", why: "Competitor positioning, pricing, and gap analysis." },
+      ];
+}
+
+function buildAssistantSections(query: string): { overview: string; sections: ReportSection[] } {
+  const intent = classifyNonCommandIntent(query);
+  const recommendations = recommendCommands(query, 5);
+
+  const quickGuide = recommendations
+    .map((item, index) => `${index + 1}. ${item.usage} - ${item.why}`)
+    .join("\n");
+
+  const responseByIntent: Record<NonCommandIntent, string> = {
+    greeting:
+      "Hi. I can guide you and run verified market analysis when you use a /market command.",
+    gratitude:
+      "You are welcome. Share your goal and I can point you to the best command for it.",
+    help:
+      "Brief has two modes: assistant guidance (this mode) and command execution (/market ...). Use commands when you want grounded outputs with sources.",
+    "research-request":
+      "I understood this as a research request. To avoid ungrounded answers, I do not run web research from plain chat. Use a /market command and I will run the full pipeline with sources.",
+    general:
+      "I can help you pick the right command and structure your request. For factual market claims, use a /market command so results are source-backed.",
+  };
+
+  const overview =
+    "Assistant mode response: no live web scanning was run. This keeps non-command replies grounded and avoids citation noise.";
+
+  const sections: ReportSection[] = [
+    {
+      title: "Brief Assistant",
+      content: responseByIntent[intent],
+    },
+    {
+      title: "Recommended Commands",
+      content: quickGuide,
+    },
+    {
+      title: "How To Use",
+      content: [
+        "1. Pick a command that matches your objective.",
+        "2. Add the required input type (url, topic, client, or product).",
+        "3. Run it as: /market <command> <input>.",
+        "4. Ask follow-ups after results for deeper breakdowns.",
+      ].join("\n"),
+    },
+  ];
+
+  return { overview, sections };
 }
 
 function getSubagentSpecs(mode: "simple" | "deep", commandId?: string): SubagentSpec[] {
@@ -492,6 +657,40 @@ export async function runResearchPipeline({
   const command = commandId
     ? MARKETING_COMMANDS.find((item) => item.id === commandId)
     : null;
+
+  if (!command) {
+    const conversational = buildAssistantSections(query);
+    const report: Report = {
+      id: crypto.randomUUID(),
+      query,
+      overview: conversational.overview,
+      sections: conversational.sections,
+      sources: [],
+      createdAt: new Date(),
+    };
+
+    const artifacts = buildReportArtifacts(report, [], undefined, undefined);
+
+    return {
+      report,
+      scores: [],
+      overallScore: undefined,
+      grade: undefined,
+      orchestration: {
+        mode: "simple",
+        commandId: undefined,
+        subagents: [],
+        merged: {
+          findings: [],
+          opportunities: [],
+          risks: [],
+          metrics: [],
+          averageConfidence: 100,
+        },
+      },
+      artifacts,
+    };
+  }
 
   const mode: "simple" | "deep" = command ? "deep" : "simple";
   const commandSkill = getCommandSkill(command?.id);

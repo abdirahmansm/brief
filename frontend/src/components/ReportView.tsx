@@ -11,6 +11,10 @@ interface ReportViewProps {
 export default function ReportView({ report, marketing }: ReportViewProps) {
   const [exporting, setExporting] = useState<"md" | "html" | "pdf" | null>(null);
   const [exportError, setExportError] = useState("");
+  const isConversationalReply =
+    !marketing &&
+    report.sources.length === 0 &&
+    report.sections.some((section) => section.title.toLowerCase() === "brief assistant");
 
   const exportReport = async (format: "md" | "html" | "pdf") => {
     setExportError("");
@@ -78,35 +82,41 @@ export default function ReportView({ report, marketing }: ReportViewProps) {
             </svg>
           </div>
           <span className="text-xs font-medium text-success">
-            {marketing ? `${marketing.icon} ${marketing.commandLabel} complete` : "Research complete"}
+            {marketing
+              ? `${marketing.icon} ${marketing.commandLabel} complete`
+              : isConversationalReply
+                ? "Brief reply"
+                : "Research complete"}
           </span>
         </div>
         <h1 className="text-2xl font-semibold text-foreground leading-tight">
           {report.query}
         </h1>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => exportReport("md")}
-            disabled={!!exporting}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
-          >
-            {exporting === "md" ? "Exporting..." : "Export .md"}
-          </button>
-          <button
-            onClick={() => exportReport("html")}
-            disabled={!!exporting}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
-          >
-            {exporting === "html" ? "Exporting..." : "Export .html"}
-          </button>
-          <button
-            onClick={() => exportReport("pdf")}
-            disabled={!!exporting}
-            className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-          >
-            {exporting === "pdf" ? "Exporting..." : "Export .pdf"}
-          </button>
-        </div>
+        {!isConversationalReply && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => exportReport("md")}
+              disabled={!!exporting}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+            >
+              {exporting === "md" ? "Exporting..." : "Export .md"}
+            </button>
+            <button
+              onClick={() => exportReport("html")}
+              disabled={!!exporting}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+            >
+              {exporting === "html" ? "Exporting..." : "Export .html"}
+            </button>
+            <button
+              onClick={() => exportReport("pdf")}
+              disabled={!!exporting}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+            >
+              {exporting === "pdf" ? "Exporting..." : "Export .pdf"}
+            </button>
+          </div>
+        )}
         {exportError && <p className="mt-2 text-xs text-red-500">{exportError}</p>}
       </div>
 

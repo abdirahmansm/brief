@@ -37,6 +37,7 @@ export default function Dashboard() {
     startMarketingCommand,
     newResearch,
     selectSession,
+    deleteSession,
   } = useResearch(user);
 
   const handleMarketingCommand = (cmd: MarketingCommand, arg: string) => {
@@ -99,6 +100,25 @@ export default function Dashboard() {
           onSelect={(id) => {
             setActiveView("research");
             selectSession(id);
+          }}
+          onDeleteSession={async (id) => {
+            const session = sessions.find((item) => item.id === id);
+            const label = session?.query || "this research session";
+            const shouldDelete = window.confirm(
+              `Delete ${label}? This cannot be undone.`
+            );
+
+            if (!shouldDelete) return;
+
+            try {
+              await deleteSession(id);
+            } catch (error) {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : "Could not delete this research session.";
+              window.alert(message);
+            }
           }}
           onNewResearch={() => {
             setActiveView("research");

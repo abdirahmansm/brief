@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { User } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -18,7 +19,7 @@ import {
   MarketingMeta,
   AuditScore,
 } from "@/types/research";
-import { MarketingCommand } from "@/lib/marketingSkills";
+import { MARKETING_COMMANDS, MarketingCommand } from "@/lib/marketingSkills";
 import { db } from "@/lib/firebase";
 
 const STEPS: ResearchStep[] = [
@@ -27,6 +28,20 @@ const STEPS: ResearchStep[] = [
   { phase: "analyzing", label: "Analyzing findings", detail: "Synthesizing patterns, pain points, and opportunities." },
   { phase: "finished", label: "Finished" },
 ];
+
+const ASSISTANT_STEPS: ResearchStep[] = [
+  { phase: "searching", label: "Understanding your request" },
+  { phase: "analyzing", label: "Preparing grounded response" },
+  { phase: "finished", label: "Finished" },
+];
+
+const DEEP_RESEARCH_MIN_CYCLES = 20;
+const DEEP_RESEARCH_MAX_CYCLES = 30;
+
+function getDeepResearchCycleCount(): number {
+  const range = DEEP_RESEARCH_MAX_CYCLES - DEEP_RESEARCH_MIN_CYCLES + 1;
+  return DEEP_RESEARCH_MIN_CYCLES + Math.floor(Math.random() * range);
+}
 
 interface ResearchApiResponse {
   report: {
@@ -40,6 +55,11 @@ interface ResearchApiResponse {
   scores?: AuditScore[];
   overallScore?: number;
   grade?: string;
+  orchestration?: {
+    mode?: string;
+    commandId?: string;
+    subagents?: Array<unknown>;
+  };
   error?: string;
 }
 
@@ -86,7 +106,7 @@ function timestampToDate(value: unknown): Date | null {
 }
 
 function serializeSession(session: ResearchSession): SerializedResearchSession {
-  return {
+  const serialized: SerializedResearchSession = {
     id: session.id,
     query: session.query,
     phase: session.phase,
@@ -100,23 +120,26 @@ function serializeSession(session: ResearchSession): SerializedResearchSession {
           createdAtIso: session.report.createdAt.toISOString(),
         }
       : null,
-    marketing: session.marketing
-      ? {
-          commandId: session.marketing.commandId,
-          commandLabel: session.marketing.commandLabel,
-          icon: session.marketing.icon,
-          inputType: session.marketing.inputType,
-          arg: session.marketing.arg,
-          outputFile: session.marketing.outputFile,
-          ...(session.marketing.scores ? { scores: session.marketing.scores } : {}),
-          ...(typeof session.marketing.overallScore === "number"
-            ? { overallScore: session.marketing.overallScore }
-            : {}),
-          ...(session.marketing.grade ? { grade: session.marketing.grade } : {}),
-        }
-      : undefined,
     createdAtIso: session.createdAt.toISOString(),
   };
+
+  if (session.marketing) {
+    serialized.marketing = {
+      commandId: session.marketing.commandId,
+      commandLabel: session.marketing.commandLabel,
+      icon: session.marketing.icon,
+      inputType: session.marketing.inputType,
+      arg: session.marketing.arg,
+      outputFile: session.marketing.outputFile,
+      ...(session.marketing.scores ? { scores: session.marketing.scores } : {}),
+      ...(typeof session.marketing.overallScore === "number"
+        ? { overallScore: session.marketing.overallScore }
+        : {}),
+      ...(session.marketing.grade ? { grade: session.marketing.grade } : {}),
+    };
+  }
+
+  return serialized;
 }
 
 function deserializeSession(data: Record<string, unknown>, fallbackId: string): ResearchSession {
@@ -205,6 +228,15 @@ function nowLabel(): string {
     second: "2-digit",
     hour12: false,
   }).format(new Date());
+}
+
+function shouldContinueMarketingContext(query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return /^(follow\s?up|follow-up|continue|same\s+(audit|report|command)|deepen)\b/.test(
+    normalized
+  );
 }
 
 async function typeByLine(
@@ -389,9 +421,11 @@ export function useResearch(user: User | null) {
             ? {
                 marketing: {
                   ...marketing,
-                  scores: finalScores,
-                  overallScore: finalOverallScore,
-                  grade: finalGrade,
+                  ...(finalScores ? { scores: finalScores } : {}),
+                  ...(typeof finalOverallScore === "number"
+                    ? { overallScore: finalOverallScore }
+                    : {}),
+                  ...(finalGrade ? { grade: finalGrade } : {}),
                 },
               }
             : {}),
@@ -404,17 +438,41 @@ export function useResearch(user: User | null) {
 
   const startResearch = useCallback(
     async (query: string) => {
+      const activeSession = sessionsRef.current.find((item) => item.id === activeId);
+      const latestMarketingSession = sessionsRef.current.find((item) => !!item.marketing);
+      const continueContext = shouldContinueMarketingContext(query);
+      const followUpMarketing = continueContext
+        ? activeSession?.marketing || latestMarketingSession?.marketing
+        : undefined;
+      const followUpCommand = followUpMarketing
+        ? MARKETING_COMMANDS.find((item) => item.id === followUpMarketing.commandId)
+        : null;
+
+      const resolvedMarketing =
+        followUpMarketing && followUpCommand
+          ? {
+              ...followUpMarketing,
+              commandLabel: followUpCommand.label,
+              icon: followUpCommand.icon,
+              inputType: followUpCommand.inputType,
+              outputFile: followUpCommand.outputFile,
+              arg: `${followUpMarketing.arg} | Follow-up: ${query}`,
+            }
+          : undefined;
+
       const id = crypto.randomUUID();
+      const initialSteps = resolvedMarketing ? STEPS : ASSISTANT_STEPS;
       const newSession: ResearchSession = {
         id,
         query,
         phase: "searching",
         currentStepIndex: 0,
-        steps: STEPS,
+        steps: initialSteps,
         sources: [],
         analysisLog: [],
         report: null,
         createdAt: new Date(),
+        ...(resolvedMarketing ? { marketing: resolvedMarketing } : {}),
       };
 
       setSessions((prev) => [newSession, ...prev]);
@@ -424,33 +482,74 @@ export function useResearch(user: User | null) {
         void persistSession(uid, newSession, true);
       }
 
-      appendLog(id, `Research request started for: ${query}`);
+      appendLog(id, `${resolvedMarketing ? "Research" : "Assistant"} request started for: ${query}`);
+      if (resolvedMarketing && continueContext) {
+        appendLog(
+          id,
+          `Continuing ${followUpCommand?.command || "/market"} context without requiring a new slash command.`
+        );
+      }
 
       try {
-        const requestPromise = runResearchRequest({ query });
+        if (resolvedMarketing) {
+          const requestPromise = runResearchRequest({
+            query,
+            commandId: resolvedMarketing.commandId,
+            commandArg: resolvedMarketing.arg,
+          });
 
-        await sleep(1200);
-        progressToStep(id, STEPS, 1);
-        appendLog(id, "Scanning live web sources and gathering citations...");
+          await sleep(1200);
+          progressToStep(id, STEPS, 1);
+          appendLog(id, "Scanning live web sources and gathering citations...");
 
-        const data = await requestPromise;
+          const data = await requestPromise;
 
-        updateSession(id, {
-          phase: "reviewing",
-          currentStepIndex: 1,
-          sources: data.report.sources,
-        });
-        appendLog(id, `Collected ${data.report.sources.length} sources. Reviewing relevance and signal quality.`);
+          updateSession(id, {
+            phase: "reviewing",
+            currentStepIndex: 1,
+            sources: data.report.sources,
+          });
+          appendLog(id, `Collected ${data.report.sources.length} sources. Reviewing relevance and signal quality.`);
 
-        await sleep(1400);
-        progressToStep(id, STEPS, 2);
-        appendLog(id, "Synthesizing evidence into market insights and structured sections...");
+          await sleep(1400);
+          progressToStep(id, STEPS, 2);
+          appendLog(id, "Synthesizing evidence into market insights and structured sections...");
 
-        await sleep(900);
-        progressToStep(id, STEPS, 3);
-        appendLog(id, "Preparing final report stream for display...");
+          await sleep(900);
+          progressToStep(id, STEPS, 3);
+          appendLog(id, "Preparing final report stream for display...");
 
-        await streamReportOutput(id, data.report);
+          await streamReportOutput(
+            id,
+            data.report,
+            resolvedMarketing,
+            data.scores,
+            data.overallScore,
+            data.grade
+          );
+        } else {
+          const data = await runResearchRequest({ query });
+
+          updateSession(id, {
+            phase: "analyzing",
+            currentStepIndex: Math.max(ASSISTANT_STEPS.length - 2, 0),
+            sources: [],
+          });
+          appendLog(id, "Assistant mode reply generated without running live web research.");
+
+          await sleep(300);
+          progressToStep(id, ASSISTANT_STEPS, ASSISTANT_STEPS.length - 1);
+          appendLog(id, "Preparing final response for display...");
+
+          await streamReportOutput(
+            id,
+            data.report,
+            undefined,
+            data.scores,
+            data.overallScore,
+            data.grade
+          );
+        }
 
       } catch (error) {
         const message =
@@ -478,7 +577,7 @@ export function useResearch(user: User | null) {
         }, true);
       }
     },
-    [uid, appendLog, progressToStep, streamReportOutput, updateSession]
+    [activeId, uid, appendLog, progressToStep, streamReportOutput, updateSession]
   );
 
   const newResearch = useCallback(() => {
@@ -489,10 +588,24 @@ export function useResearch(user: User | null) {
     setActiveId(id);
   }, []);
 
+  const deleteSession = useCallback(
+    async (id: string) => {
+      setSessions((prev) => prev.filter((session) => session.id !== id));
+      setActiveId((prev) => (prev === id ? null : prev));
+
+      if (!uid) return;
+
+      const ref = doc(db, "users", uid, "researchSessions", id);
+      await deleteDoc(ref);
+    },
+    [uid]
+  );
+
   /** Start a marketing command session (e.g., /market audit https://...) */
   const startMarketingCommand = useCallback(
     async (command: MarketingCommand, arg: string) => {
       const id = crypto.randomUUID();
+      const deepResearchCycles = getDeepResearchCycleCount();
 
       // Build steps from the command's phases
       const marketingSteps: ResearchStep[] = command.phases.map((label, i) => {
@@ -536,6 +649,10 @@ export function useResearch(user: User | null) {
       }
 
       appendLog(id, `Started ${command.command} with target: ${arg}`);
+      appendLog(
+        id,
+        `Deep analysis mode engaged. Running ${deepResearchCycles} research passes before final output.`
+      );
 
       try {
         const dataPromise = runResearchRequest({
@@ -544,10 +661,20 @@ export function useResearch(user: User | null) {
           commandArg: arg,
         });
 
-        for (let index = 1; index < Math.max(marketingSteps.length - 1, 1); index += 1) {
-          await sleep(1000);
-          progressToStep(id, marketingSteps, index);
-          appendLog(id, `Step ${index + 1}/${marketingSteps.length}: ${marketingSteps[index].label}`);
+        for (let pass = 1; pass <= deepResearchCycles; pass += 1) {
+          await sleep(850);
+
+          const progressRatio = pass / deepResearchCycles;
+          const stepIndex = Math.min(
+            Math.floor(progressRatio * Math.max(marketingSteps.length - 2, 1)),
+            Math.max(marketingSteps.length - 2, 1)
+          );
+
+          progressToStep(id, marketingSteps, stepIndex);
+          appendLog(
+            id,
+            `Deep research pass ${pass}/${deepResearchCycles}: ${marketingSteps[stepIndex]?.label || "Analyzing"}`
+          );
         }
 
         const data = await dataPromise;
@@ -606,5 +733,6 @@ export function useResearch(user: User | null) {
     startMarketingCommand,
     newResearch,
     selectSession,
+    deleteSession,
   };
 }
