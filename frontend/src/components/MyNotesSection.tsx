@@ -61,37 +61,37 @@ export default function MyNotesSection({
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90"
+          className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white shadow-[0_10px_24px_rgba(139,92,246,0.22)] hover:opacity-95"
         >
           New Note
         </button>
       </div>
 
-      <div className="mb-6 rounded-2xl border border-border bg-card p-4">
-        <p className="text-xs uppercase tracking-wide text-muted">Total Notes</p>
-        <p className="mt-2 text-2xl font-semibold text-foreground">{notes.length}</p>
+      <div className="glass-panel mb-6 rounded-2xl p-4">
+        <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Total Notes</p>
+        <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">{notes.length}</p>
       </div>
 
       {loadingNotes ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted">
+        <div className="glass-panel rounded-2xl p-10 text-center text-sm text-[var(--muted-foreground)]">
           Loading notes...
         </div>
       ) : notes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
-          <p className="text-base font-medium text-foreground">No notes yet</p>
-          <p className="mt-2 text-sm text-muted">
+        <div className="rounded-2xl border border-dashed border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.45)] p-12 text-center">
+          <p className="text-base font-medium text-[var(--foreground)]">No notes yet</p>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
             Start by creating your first note.
           </p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((note) => (
-            <article key={note.id} className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="line-clamp-2 text-sm font-semibold text-foreground">{note.title}</h2>
-              <p className="mt-2 line-clamp-4 text-sm text-muted">
+            <article key={note.id} className="glass-panel rounded-2xl p-4">
+              <h2 className="line-clamp-2 text-sm font-semibold text-[var(--foreground)]">{note.title}</h2>
+              <p className="mt-2 line-clamp-4 text-sm text-[var(--muted-foreground)]">
                 {note.content?.trim() || "No additional content."}
               </p>
-              <p className="mt-4 text-xs text-muted">Created {formatDate(note.createdAt)}</p>
+              <p className="mt-4 text-xs text-[var(--muted-foreground)]">Created {formatDate(note.createdAt)}</p>
             </article>
           ))}
         </div>
@@ -111,7 +111,7 @@ export default function MyNotesSection({
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="e.g. Q2 campaign ideas"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </div>
 
@@ -124,7 +124,7 @@ export default function MyNotesSection({
               onChange={(event) => setContent(event.target.value)}
               placeholder="Write your note..."
               rows={4}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </div>
 
@@ -134,14 +134,14 @@ export default function MyNotesSection({
             <button
               onClick={() => setModalOpen(false)}
               disabled={saving}
-              className="rounded-xl border border-border px-4 py-2 text-sm text-foreground hover:bg-surface disabled:opacity-50"
+              className="rounded-xl border border-[rgba(139,92,246,0.2)] px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)] disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleCreateNote}
               disabled={saving}
-              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {saving ? "Creating..." : "Create"}
             </button>

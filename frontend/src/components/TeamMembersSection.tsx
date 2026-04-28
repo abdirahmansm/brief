@@ -61,45 +61,45 @@ export default function TeamMembersSection({
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90"
+          className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white shadow-[0_10px_24px_rgba(139,92,246,0.22)] hover:opacity-95"
         >
           Add Member
         </button>
       </div>
 
-      <div className="mb-6 rounded-2xl border border-border bg-card p-4">
-        <p className="text-xs uppercase tracking-wide text-muted">Team Size</p>
-        <p className="mt-2 text-2xl font-semibold text-foreground">{members.length}</p>
+      <div className="glass-panel mb-6 rounded-2xl p-4">
+        <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Team Size</p>
+        <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">{members.length}</p>
       </div>
 
       {loadingMembers ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted">
+        <div className="glass-panel rounded-2xl p-10 text-center text-sm text-[var(--muted-foreground)]">
           Loading team members...
         </div>
       ) : members.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
-          <p className="text-base font-medium text-foreground">No team members yet</p>
-          <p className="mt-2 text-sm text-muted">
+        <div className="rounded-2xl border border-dashed border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.45)] p-12 text-center">
+          <p className="text-base font-medium text-[var(--foreground)]">No team members yet</p>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
             Add your first team member to start collaborating.
           </p>
         </div>
       ) : (
-        <div className="grid gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="grid gap-3 rounded-2xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.52)] p-4">
           {members.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between rounded-xl border border-border px-4 py-3"
+              className="flex items-center justify-between rounded-xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.55)] px-4 py-3"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(139,92,246,0.14)] text-sm font-semibold text-[var(--accent)]">
                   {member.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{member.name}</p>
-                  <p className="text-xs text-muted">{member.role?.trim() || "No role set"}</p>
+                  <p className="text-sm font-medium text-[var(--foreground)]">{member.name}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{member.role?.trim() || "No role set"}</p>
                 </div>
               </div>
-              <p className="text-xs text-muted">Added {formatDate(member.createdAt)}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">Added {formatDate(member.createdAt)}</p>
             </div>
           ))}
         </div>
@@ -119,7 +119,7 @@ export default function TeamMembersSection({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="e.g. Fatima Noor"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </div>
 
@@ -131,7 +131,7 @@ export default function TeamMembersSection({
               value={role}
               onChange={(event) => setRole(event.target.value)}
               placeholder="e.g. Growth Lead"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </div>
 
@@ -141,14 +141,14 @@ export default function TeamMembersSection({
             <button
               onClick={() => setModalOpen(false)}
               disabled={saving}
-              className="rounded-xl border border-border px-4 py-2 text-sm text-foreground hover:bg-surface disabled:opacity-50"
+              className="rounded-xl border border-[rgba(139,92,246,0.2)] px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)] disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleCreateMember}
               disabled={saving}
-              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {saving ? "Saving..." : "Create"}
             </button>

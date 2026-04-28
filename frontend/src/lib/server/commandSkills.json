@@ -22,6 +22,32 @@
         "Validate weighted score coherence and provide top priorities by impact."
       ]
     },
+    "deepresearch": {
+      "pre": [
+        "Prioritize source diversity across news, industry analysis, and primary signals before concluding trends.",
+        "Separate confirmed facts, emerging signals, and speculation in every major finding.",
+        "Apply explicit fact-checking to high-impact claims and mark confidence levels.",
+        "Target 20-50 unique sources when available, spanning major news, journals/reports, newsletters, and social/community pulse.",
+        "Collect source-linked visual references when available (charts, figures, or representative images from cited pages)."
+      ],
+      "post": [
+        "Return a concise executive briefing with what changed, why it matters now, and what to do next.",
+        "Include signal quality notes, contradiction handling, and coverage limits.",
+        "Ensure recommendations are operator-grade with clear impact and execution speed.",
+        "Deliver premium long-form depth (5-10 pages equivalent) and avoid shallow summaries.",
+        "Include a visual evidence section with source links when visual assets were available in cited material."
+      ]
+    },
+    "scrape": {
+      "pre": [
+        "Prioritize extracted customer language from scraped pages over generic assumptions.",
+        "Separate explicit complaints from inferred pain points and tag uncertainty when evidence is weak."
+      ],
+      "post": [
+        "Return top complaint and praise themes with concrete evidence bullets and source links.",
+        "Call out coverage limits such as low review volume, stale data, or source bias."
+      ]
+    },
     "sizing": {
       "pre": [
         "Use explicit TAM/SAM/SOM assumptions and scenario ranges (base, upside, downside).",

@@ -71,19 +71,20 @@ export function buildReportArtifacts(
     "<!doctype html>",
     "<html><head><meta charset=\"utf-8\"/>",
     "<style>",
-    "body{font-family:Segoe UI,Arial,sans-serif;line-height:1.55;padding:36px;color:#111}",
-    "h1{font-size:28px;margin:0 0 8px}",
-    "h2{font-size:18px;margin:24px 0 8px}",
-    ".meta{color:#555;font-size:13px}",
-    ".score{background:#f5f7ff;border:1px solid #dfe4ff;padding:10px 12px;border-radius:10px;margin:12px 0}",
-    "ul{padding-left:20px}",
-    "a{color:#2747d9;text-decoration:none}",
+    "body{font-family:Inter,Segoe UI,Arial,sans-serif;line-height:1.6;padding:40px;color:#0b1226;background:#fff}",
+    "h1{font-size:26px;margin:0 0 6px;color:#0b1226}",
+    "h2{font-size:15px;margin:22px 0 8px;color:#0b1226}",
+    ".meta{color:#5b6470;font-size:13px;margin-bottom:8px}",
+    ".section{padding:12px 0;border-bottom:1px solid #f0f2f5}",
+    ".bullet{margin:6px 0}",
+    "a{color:#0b5fff;text-decoration:none}",
+    "code.small{background:#f6f8ff;padding:2px 6px;border-radius:6px;font-size:12px}",
     "</style>",
     "</head><body>",
     `<h1>${escapeHtml(report.query)}</h1>`,
     `<p class=\"meta\"><strong>Generated:</strong> ${escapeHtml(report.createdAt.toISOString())}</p>`,
     typeof overallScore === "number"
-      ? `<div class=\"score\"><strong>Overall Score:</strong> ${overallScore}/100${grade ? ` (Grade ${escapeHtml(grade)})` : ""}</div>`
+      ? `<div style=\"background:#f7f9ff;border:1px solid #e6eeff;padding:10px 14px;border-radius:8px;margin:12px 0\"><strong>Overall Score:</strong> ${overallScore}/100${grade ? ` (Grade ${escapeHtml(grade)})` : ""}</div>`
       : "",
     `<h2>Overview</h2><p>${escapeHtml(report.overview).replace(/\n/g, "<br/>")}</p>`,
     ...(scores && scores.length
@@ -97,10 +98,9 @@ export function buildReportArtifacts(
             .join("")}</ul>`,
         ]
       : []),
-    ...report.sections.map(
-      (section) =>
-        `<h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.content).replace(/\n/g, "<br/>")}</p>`
-    ),
+    ...report.sections.map((section) => {
+      return `<div class=\"section\"><h2>${escapeHtml(section.title)}</h2><div>${escapeHtml(section.content).replace(/\n\n/g, "</div><div>").replace(/\n/g, "<br/>")}</div></div>`;
+    }),
     report.sources.length
       ? `<h2>Sources</h2><ul>${report.sources
           .map(

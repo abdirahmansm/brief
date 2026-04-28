@@ -37,10 +37,18 @@ const ASSISTANT_STEPS: ResearchStep[] = [
 
 const DEEP_RESEARCH_MIN_CYCLES = 20;
 const DEEP_RESEARCH_MAX_CYCLES = 30;
+const DEEP_RESEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function getDeepResearchCycleCount(): number {
   const range = DEEP_RESEARCH_MAX_CYCLES - DEEP_RESEARCH_MIN_CYCLES + 1;
   return DEEP_RESEARCH_MIN_CYCLES + Math.floor(Math.random() * range);
+}
+
+function normalizeCacheArg(value: string): string {
+  return getBaseMarketingArg(value)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 interface ResearchApiResponse {
@@ -201,6 +209,7 @@ async function runResearchRequest(payload: {
   query: string;
   commandId?: string;
   commandArg?: string;
+  responseDepth?: "simple" | "deep";
 }): Promise<ResearchApiResponse> {
   const response = await fetch("/api/research", {
     method: "POST",
@@ -230,13 +239,49 @@ function nowLabel(): string {
   }).format(new Date());
 }
 
-function shouldContinueMarketingContext(query: string): boolean {
+function shouldContinueMarketingContext(
+  query: string,
+  activeMarketing: MarketingMeta | undefined
+): boolean {
+  if (!activeMarketing) return false;
+
   const normalized = query.trim().toLowerCase();
   if (!normalized) return false;
 
-  return /^(follow\s?up|follow-up|continue|same\s+(audit|report|command)|deepen)\b/.test(
-    normalized
-  );
+  if (normalized.startsWith("/market")) return false;
+  if (normalized.startsWith("/")) return false;
+
+  // Explicit reset intents should start a fresh non-command conversation.
+  if (/^(new (topic|research|thread)|start over|reset context)\b/.test(normalized)) {
+    return false;
+  }
+
+  // Any plain text after a command session is treated as a contextual follow-up.
+  return true;
+}
+
+function getBaseMarketingArg(arg: string): string {
+  const followUpToken = " | Follow-up";
+  const index = arg.indexOf(followUpToken);
+  if (index === -1) return arg.trim();
+  return arg.slice(0, index).trim();
+}
+
+function mergeSources(
+  base: Array<{ title: string; url: string; domain: string; favicon?: string }>,
+  incoming: Array<{ title: string; url: string; domain: string; favicon?: string }>
+): Array<{ title: string; url: string; domain: string; favicon?: string }> {
+  const seen = new Set<string>();
+  const merged: Array<{ title: string; url: string; domain: string; favicon?: string }> = [];
+
+  [...base, ...incoming].forEach((source) => {
+    const key = source.url || `${source.domain}-${source.title}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(source);
+  });
+
+  return merged;
 }
 
 async function typeByLine(
@@ -355,15 +400,23 @@ export function useResearch(user: User | null) {
       marketing?: MarketingMeta,
       finalScores?: AuditScore[],
       finalOverallScore?: number,
-      finalGrade?: string
+      finalGrade?: string,
+      options?: {
+        appendToExistingReport?: ResearchSession["report"] | null;
+        refinementQuery?: string;
+        preserveExistingMarketingScores?: boolean;
+      }
     ) => {
       const createdAt = new Date(report.createdAt);
+      const appendBase = options?.appendToExistingReport;
+      const refinementQuery = options?.refinementQuery || report.query;
+
       const skeletonReport = {
         id: report.id,
-        query: report.query,
-        overview: "",
-        sections: [] as Array<{ title: string; content: string }>,
-        sources: report.sources,
+        query: appendBase?.query || report.query,
+        overview: appendBase?.overview || "",
+        sections: appendBase ? [...appendBase.sections] : ([] as Array<{ title: string; content: string }>),
+        sources: appendBase ? mergeSources(appendBase.sources, report.sources) : report.sources,
         createdAt,
       };
 
@@ -373,39 +426,82 @@ export function useResearch(user: User | null) {
       });
       appendLog(id, "Drafting executive summary...");
 
-      let liveOverview = "";
+      let liveOverview = skeletonReport.overview;
+      const baseSections = [...skeletonReport.sections];
+      const refinementSections: Array<{ title: string; content: string }> = [];
 
-      await typeByLine(report.overview, (value) => {
-        liveOverview = value;
-        updateSession(id, {
-          report: {
-            ...skeletonReport,
-            overview: liveOverview,
-            sections: [...skeletonReport.sections],
-          },
-        });
-      });
+      if (appendBase) {
+        refinementSections.push({ title: "__chat_user__", content: refinementQuery });
+        refinementSections.push({ title: "__chat_assistant__", content: "" });
 
-      const liveSections: Array<{ title: string; content: string }> = [];
-      for (let sectionIndex = 0; sectionIndex < report.sections.length; sectionIndex += 1) {
-        const fullSection = report.sections[sectionIndex];
-        appendLog(id, `Drafting section: ${fullSection.title}`);
-        liveSections.push({ title: fullSection.title, content: "" });
-
-        await typeByLine(fullSection.content, (value) => {
-          liveSections[sectionIndex] = {
-            title: fullSection.title,
+        await typeByLine(report.overview, (value) => {
+          refinementSections[1] = {
+            title: "__chat_assistant__",
             content: value,
           };
           updateSession(id, {
             report: {
               ...skeletonReport,
               overview: liveOverview,
-              sections: [...liveSections],
+              sections: [...baseSections, ...refinementSections],
             },
           });
         });
-        appendLog(id, `Completed section: ${fullSection.title}`);
+
+        for (let sectionIndex = 0; sectionIndex < report.sections.length; sectionIndex += 1) {
+          const fullSection = report.sections[sectionIndex];
+          const refinementTitle = `__chat_assistant_detail__:${fullSection.title}`;
+          appendLog(id, `Drafting section: ${refinementTitle}`);
+          refinementSections.push({ title: refinementTitle, content: "" });
+          const outputIndex = refinementSections.length - 1;
+
+          await typeByLine(fullSection.content, (value) => {
+            refinementSections[outputIndex] = {
+              title: refinementTitle,
+              content: value,
+            };
+            updateSession(id, {
+              report: {
+                ...skeletonReport,
+                overview: liveOverview,
+                sections: [...baseSections, ...refinementSections],
+              },
+            });
+          });
+          appendLog(id, `Completed section: ${refinementTitle}`);
+        }
+      } else {
+        await typeByLine(report.overview, (value) => {
+          liveOverview = value;
+          updateSession(id, {
+            report: {
+              ...skeletonReport,
+              overview: liveOverview,
+              sections: [...baseSections],
+            },
+          });
+        });
+
+        for (let sectionIndex = 0; sectionIndex < report.sections.length; sectionIndex += 1) {
+          const fullSection = report.sections[sectionIndex];
+          appendLog(id, `Drafting section: ${fullSection.title}`);
+          refinementSections.push({ title: fullSection.title, content: "" });
+
+          await typeByLine(fullSection.content, (value) => {
+            refinementSections[sectionIndex] = {
+              title: fullSection.title,
+              content: value,
+            };
+            updateSession(id, {
+              report: {
+                ...skeletonReport,
+                overview: liveOverview,
+                sections: [...refinementSections],
+              },
+            });
+          });
+          appendLog(id, `Completed section: ${fullSection.title}`);
+        }
       }
 
       appendLog(id, "Finalizing report output.", true);
@@ -414,18 +510,26 @@ export function useResearch(user: User | null) {
         {
           phase: "finished",
           report: {
-            ...report,
+            ...skeletonReport,
+            overview: liveOverview,
+            sections: appendBase
+              ? [...baseSections, ...refinementSections]
+              : [...refinementSections],
             createdAt,
           },
           ...(marketing
             ? {
                 marketing: {
                   ...marketing,
-                  ...(finalScores ? { scores: finalScores } : {}),
-                  ...(typeof finalOverallScore === "number"
+                  ...(!options?.preserveExistingMarketingScores && finalScores
+                    ? { scores: finalScores }
+                    : {}),
+                  ...(!options?.preserveExistingMarketingScores && typeof finalOverallScore === "number"
                     ? { overallScore: finalOverallScore }
                     : {}),
-                  ...(finalGrade ? { grade: finalGrade } : {}),
+                  ...(!options?.preserveExistingMarketingScores && finalGrade
+                    ? { grade: finalGrade }
+                    : {}),
                 },
               }
             : {}),
@@ -437,12 +541,21 @@ export function useResearch(user: User | null) {
   );
 
   const startResearch = useCallback(
-    async (query: string) => {
+    async (
+      query: string,
+      mode: "simple" | "deep" = "simple",
+      options?: { continueInSkill?: boolean }
+    ) => {
       const activeSession = sessionsRef.current.find((item) => item.id === activeId);
-      const latestMarketingSession = sessionsRef.current.find((item) => !!item.marketing);
-      const continueContext = shouldContinueMarketingContext(query);
+      const candidateMarketing = activeSession?.marketing;
+      const allowDeepContinuation = mode === "deep";
+      const continueContext = allowDeepContinuation
+        ? options?.continueInSkill
+          ? Boolean(candidateMarketing)
+          : shouldContinueMarketingContext(query, candidateMarketing)
+        : false;
       const followUpMarketing = continueContext
-        ? activeSession?.marketing || latestMarketingSession?.marketing
+        ? candidateMarketing
         : undefined;
       const followUpCommand = followUpMarketing
         ? MARKETING_COMMANDS.find((item) => item.id === followUpMarketing.commandId)
@@ -456,30 +569,50 @@ export function useResearch(user: User | null) {
               icon: followUpCommand.icon,
               inputType: followUpCommand.inputType,
               outputFile: followUpCommand.outputFile,
-              arg: `${followUpMarketing.arg} | Follow-up: ${query}`,
+              arg: getBaseMarketingArg(followUpMarketing.arg),
             }
           : undefined;
 
-      const id = crypto.randomUUID();
+      const shouldReuseActiveSession = Boolean(activeSession && continueContext);
+      const id = shouldReuseActiveSession && activeSession
+        ? activeSession.id
+        : crypto.randomUUID();
       const initialSteps = resolvedMarketing ? STEPS : ASSISTANT_STEPS;
-      const newSession: ResearchSession = {
-        id,
-        query,
-        phase: "searching",
-        currentStepIndex: 0,
-        steps: initialSteps,
-        sources: [],
-        analysisLog: [],
-        report: null,
-        createdAt: new Date(),
-        ...(resolvedMarketing ? { marketing: resolvedMarketing } : {}),
-      };
+      if (shouldReuseActiveSession && activeSession) {
+        updateSession(
+          id,
+          {
+            query,
+            phase: "searching",
+            currentStepIndex: 0,
+            steps: initialSteps,
+            sources: [],
+            report: continueContext ? activeSession.report : null,
+            ...(resolvedMarketing ? { marketing: resolvedMarketing } : { marketing: undefined }),
+          },
+          true
+        );
+        setActiveId(id);
+      } else {
+        const newSession: ResearchSession = {
+          id,
+          query,
+          phase: "searching",
+          currentStepIndex: 0,
+          steps: initialSteps,
+          sources: [],
+          analysisLog: [],
+          report: null,
+          createdAt: new Date(),
+          ...(resolvedMarketing ? { marketing: resolvedMarketing } : {}),
+        };
 
-      setSessions((prev) => [newSession, ...prev]);
-      setActiveId(id);
+        setSessions((prev) => [newSession, ...prev]);
+        setActiveId(id);
 
-      if (uid) {
-        void persistSession(uid, newSession, true);
+        if (uid) {
+          void persistSession(uid, newSession, true);
+        }
       }
 
       appendLog(id, `${resolvedMarketing ? "Research" : "Assistant"} request started for: ${query}`);
@@ -496,6 +629,7 @@ export function useResearch(user: User | null) {
             query,
             commandId: resolvedMarketing.commandId,
             commandArg: resolvedMarketing.arg,
+            responseDepth: mode,
           });
 
           await sleep(1200);
@@ -509,7 +643,7 @@ export function useResearch(user: User | null) {
             currentStepIndex: 1,
             sources: data.report.sources,
           });
-          appendLog(id, `Collected ${data.report.sources.length} sources. Reviewing relevance and signal quality.`);
+          appendLog(id, `Collected ${data.report.sources.length} sources. Reviewing relevance and evidence quality.`);
 
           await sleep(1400);
           progressToStep(id, STEPS, 2);
@@ -523,12 +657,17 @@ export function useResearch(user: User | null) {
             id,
             data.report,
             resolvedMarketing,
-            data.scores,
-            data.overallScore,
-            data.grade
+            continueContext ? undefined : data.scores,
+            continueContext ? undefined : data.overallScore,
+            continueContext ? undefined : data.grade,
+            {
+              appendToExistingReport: continueContext ? activeSession?.report || null : null,
+              refinementQuery: query,
+              preserveExistingMarketingScores: continueContext,
+            }
           );
         } else {
-          const data = await runResearchRequest({ query });
+          const data = await runResearchRequest({ query, responseDepth: mode });
 
           updateSession(id, {
             phase: "analyzing",
@@ -603,8 +742,16 @@ export function useResearch(user: User | null) {
 
   /** Start a marketing command session (e.g., /market audit https://...) */
   const startMarketingCommand = useCallback(
-    async (command: MarketingCommand, arg: string) => {
-      const id = crypto.randomUUID();
+    async (
+      command: MarketingCommand,
+      arg: string,
+      options?: { forceNewSession?: boolean }
+    ) => {
+      const activeSession = sessionsRef.current.find((item) => item.id === activeId);
+      const shouldReuseActiveSession = options?.forceNewSession
+        ? false
+        : Boolean(activeSession);
+      const id = shouldReuseActiveSession && activeSession ? activeSession.id : crypto.randomUUID();
       const deepResearchCycles = getDeepResearchCycleCount();
 
       // Build steps from the command's phases
@@ -628,24 +775,125 @@ export function useResearch(user: User | null) {
         outputFile: command.outputFile,
       };
 
-      const newSession: ResearchSession = {
-        id,
-        query: `${command.command} ${arg}`,
-        phase: "searching",
-        currentStepIndex: 0,
-        steps: marketingSteps,
-        sources: [],
-        analysisLog: [],
-        report: null,
-        createdAt: new Date(),
-        marketing,
-      };
+      // Reuse deep research results for 24h to avoid redundant API spend.
+      // Allow a tester/admin to bypass the cache so they can re-run deep research freely.
+      if (command.id === "deepresearch") {
+        const normalizedArg = normalizeCacheArg(arg);
+        const adminBypassEmail = "abdirahmansm02@gmail.com";
+        const isAdminBypass = !!user && user.email === adminBypassEmail;
 
-      setSessions((prev) => [newSession, ...prev]);
-      setActiveId(id);
+        if (!isAdminBypass) {
+          const now = Date.now();
+          const cacheCandidate = sessionsRef.current
+            .filter((session) => {
+              if (!session.report) return false;
+              if (session.marketing?.commandId !== "deepresearch") return false;
+              if (normalizeCacheArg(session.marketing.arg) !== normalizedArg) return false;
+              const baselineTime = session.report?.createdAt?.getTime?.() || session.createdAt.getTime();
+              return now - baselineTime <= DEEP_RESEARCH_CACHE_TTL_MS;
+            })
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
-      if (uid) {
-        void persistSession(uid, newSession, true);
+          if (cacheCandidate?.report) {
+            const cachedMarketing: MarketingMeta = {
+              ...marketing,
+              ...(cacheCandidate.marketing?.scores ? { scores: cacheCandidate.marketing.scores } : {}),
+              ...(typeof cacheCandidate.marketing?.overallScore === "number"
+                ? { overallScore: cacheCandidate.marketing.overallScore }
+                : {}),
+              ...(cacheCandidate.marketing?.grade ? { grade: cacheCandidate.marketing.grade } : {}),
+            };
+
+            const replayedReport = {
+              ...cacheCandidate.report,
+              id: crypto.randomUUID(),
+              createdAt: new Date(),
+            };
+
+            if (shouldReuseActiveSession && activeSession) {
+              updateSession(
+                id,
+                {
+                  query: `${command.command} ${arg}`,
+                  phase: "finished",
+                  currentStepIndex: Math.max(marketingSteps.length - 1, 0),
+                  steps: marketingSteps,
+                  sources: replayedReport.sources,
+                  report: replayedReport,
+                  marketing: cachedMarketing,
+                },
+                true
+              );
+              setActiveId(id);
+            } else {
+              const replaySession: ResearchSession = {
+                id,
+                query: `${command.command} ${arg}`,
+                phase: "finished",
+                currentStepIndex: Math.max(marketingSteps.length - 1, 0),
+                steps: marketingSteps,
+                sources: replayedReport.sources,
+                analysisLog: [],
+                report: replayedReport,
+                createdAt: new Date(),
+                marketing: cachedMarketing,
+              };
+
+              setSessions((prev) => [replaySession, ...prev]);
+              setActiveId(id);
+
+              if (uid) {
+                void persistSession(uid, replaySession, true);
+              }
+            }
+
+            appendLog(id, `Started ${command.command} with target: ${arg}`);
+            appendLog(
+              id,
+              "Cache hit: reused deep research report from the last 24h. Skipped new external API requests."
+            );
+            return;
+          }
+        } else {
+          appendLog(id, `Admin cache bypass: user ${user?.email} allowed to re-run deepresearch`);
+        }
+      }
+
+      if (shouldReuseActiveSession && activeSession) {
+        updateSession(
+          id,
+          {
+            query: `${command.command} ${arg}`,
+            phase: "searching",
+            currentStepIndex: 0,
+            steps: marketingSteps,
+            sources: [],
+            report: null,
+            marketing,
+          },
+          true
+        );
+        setActiveId(id);
+      } else {
+        const newSession: ResearchSession = {
+          id,
+          query: `${command.command} ${arg}`,
+          phase: "searching",
+          currentStepIndex: 0,
+          steps: marketingSteps,
+          sources: [],
+          analysisLog: [],
+          report: null,
+          createdAt: new Date(),
+          marketing,
+        };
+
+        setSessions((prev) => [newSession, ...prev]);
+        setActiveId(id);
+
+        if (uid) {
+          void persistSession(uid, newSession, true);
+        }
       }
 
       appendLog(id, `Started ${command.command} with target: ${arg}`);
@@ -659,6 +907,7 @@ export function useResearch(user: User | null) {
           query: arg,
           commandId: command.id,
           commandArg: arg,
+          responseDepth: "deep",
         });
 
         for (let pass = 1; pass <= deepResearchCycles; pass += 1) {
@@ -722,7 +971,7 @@ export function useResearch(user: User | null) {
         }, true);
       }
     },
-    [uid, appendLog, progressToStep, streamReportOutput, updateSession]
+    [activeId, uid, appendLog, progressToStep, streamReportOutput, updateSession]
   );
 
   return {

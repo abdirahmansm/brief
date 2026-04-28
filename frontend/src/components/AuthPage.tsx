@@ -5,8 +5,13 @@ import { useAuth } from "@/components/AuthProvider";
 import BriefLogo from "@/components/BriefLogo";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import Link from "next/link";
 
-export default function AuthPage() {
+interface AuthPageProps {
+  authIntent?: "user" | "admin";
+}
+
+export default function AuthPage({ authIntent = "user" }: AuthPageProps) {
   const { signIn, signUp, signInWithGoogle, pendingVerificationEmail, clearPendingVerification } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -71,9 +76,20 @@ export default function AuthPage() {
           : "";
       if (code === "auth/popup-closed-by-user") {
         setError("");
+      } else if (code === "auth/unauthorized-domain") {
+        setError("Google sign-in is blocked for this domain. Add the current domain to Firebase Auth > Settings > Authorized domains.");
+      } else if (code === "auth/operation-not-allowed") {
+        setError("Google sign-in is not enabled in Firebase. Enable Google provider in Firebase Auth > Sign-in method.");
+      } else if (code === "auth/popup-blocked") {
+        setError("Browser blocked the Google popup. Allow popups for this site and try again.");
+      } else if (code === "auth/cancelled-popup-request") {
+        setError("Google sign-in request was interrupted. Try once more and wait for the popup to finish.");
+      } else if (code === "auth/account-exists-with-different-credential") {
+        setError("This email already exists with another sign-in method. Sign in with that method first, then link Google.");
       } else {
-        setError("Could not sign in with Google. Please try again");
+        setError(`Could not sign in with Google (${code || "unknown error"}). Please try again`);
       }
+      console.error("Google sign-in failed", err);
     } finally {
       setLoading(false);
     }
@@ -97,21 +113,21 @@ export default function AuthPage() {
   // Verification screen
   if (pendingVerificationEmail) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#eef1f5] dark:bg-[#09090b] px-4">
-        <div className="w-full max-w-[420px] bg-white dark:bg-card rounded-2xl shadow-[0_2px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_32px_rgba(0,0,0,0.3)] p-8 sm:p-10">
+      <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(900px_500px_at_15%_10%,rgba(124,58,237,0.18),transparent_60%),radial-gradient(700px_420px_at_86%_16%,rgba(124,58,237,0.12),transparent_55%),linear-gradient(135deg,oklch(0.08_0.01_280),oklch(0.12_0.015_280))] px-4 text-white">
+        <div className="glass-panel-strong w-full max-w-[420px] rounded-2xl p-8 shadow-[0_2px_32px_rgba(0,0,0,0.3)] sm:p-10">
           <div className="flex flex-col items-center">
-            <div className="w-14 h-14 rounded-full bg-accent/10 flex items-center justify-center mb-5">
-              <svg className="w-7 h-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[rgba(139,92,246,0.1)]">
+              <svg className="h-7 w-7 text-[var(--accent)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="4" width="20" height="16" rx="2" />
                 <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-[#111] dark:text-foreground mb-2">
+            <h2 className="mb-2 text-lg font-semibold text-white">
               Verify your email
             </h2>
-            <p className="text-sm text-[#666] dark:text-muted text-center leading-relaxed">
+            <p className="text-center text-sm leading-relaxed text-[var(--muted-foreground)]">
               We have sent you a verification email to{" "}
-              <span className="font-medium text-[#111] dark:text-foreground">
+              <span className="font-medium text-white">
                 {pendingVerificationEmail}
               </span>
               . Please verify it and log in.
@@ -123,7 +139,7 @@ export default function AuthPage() {
                 setError("");
                 setResetSent(false);
               }}
-              className="mt-6 w-full py-3 rounded-xl bg-accent text-white text-sm font-semibold hover:opacity-90 cursor-pointer"
+              className="mt-6 w-full cursor-pointer rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] py-3 text-sm font-semibold text-white hover:opacity-90"
             >
               Login
             </button>
@@ -134,24 +150,27 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#eef1f5] dark:bg-[#09090b] px-4">
-      <div className="w-full max-w-[420px] bg-white dark:bg-card rounded-2xl shadow-[0_2px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_32px_rgba(0,0,0,0.3)] p-8 sm:p-10">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(900px_500px_at_15%_10%,rgba(124,58,237,0.18),transparent_60%),radial-gradient(700px_420px_at_86%_16%,rgba(124,58,237,0.12),transparent_55%),linear-gradient(135deg,oklch(0.08_0.01_280),oklch(0.12_0.015_280))] px-4 text-white">
+      <div className="glass-panel-strong w-full max-w-[420px] rounded-2xl p-8 shadow-[0_2px_32px_rgba(0,0,0,0.3)] sm:p-10">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <BriefLogo size={36} />
-          <span className="text-xl font-semibold text-[#111] dark:text-foreground tracking-[-0.01em] mt-2">
-            brief
+          <div className="brand-lockup-scan brand-lockup-scan-md relative flex items-center gap-2 pr-2">
+            <BriefLogo size={36} className="brand-icon-scan" />
+            <span className="brand-word text-xl font-semibold tracking-[-0.01em] text-white">
+              <span className="brand-letter-b">B</span>rief
+            </span>
+            <span aria-hidden className="brand-scan-dot" />
+          </div>
+          <span className="mt-1 text-sm text-[var(--muted-foreground)]">
+            {authIntent === "admin" ? "Admin sign in" : "Welcome to Brief"}
           </span>
-          <p className="text-sm text-[#666] dark:text-muted mt-1">
-            Welcome to Brief
-          </p>
         </div>
 
         {/* Google button */}
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-[#ddd] dark:border-border bg-white dark:bg-card text-sm font-medium text-[#333] dark:text-foreground hover:bg-[#f9f9f9] dark:hover:bg-surface disabled:opacity-50 cursor-pointer"
+          className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.5)] px-4 py-3 text-sm font-medium text-white hover:bg-[rgba(139,92,246,0.08)] disabled:opacity-50"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -176,16 +195,16 @@ export default function AuthPage() {
 
         {/* Divider */}
         <div className="flex items-center gap-3 my-6">
-          <div className="flex-1 h-px bg-[#e5e5e5] dark:bg-border" />
-          <span className="text-xs text-[#999] dark:text-muted">or</span>
-          <div className="flex-1 h-px bg-[#e5e5e5] dark:bg-border" />
+          <div className="h-px flex-1 bg-[rgba(139,92,246,0.16)]" />
+          <span className="text-xs text-[var(--muted-foreground)]">or</span>
+          <div className="h-px flex-1 bg-[rgba(139,92,246,0.16)]" />
         </div>
 
         {/* Email/password form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email field */}
           <div>
-            <label className="block text-sm font-medium text-[#333] dark:text-foreground mb-1.5">
+            <label className="mb-1.5 block text-sm font-medium text-white">
               Email
             </label>
             <div className="relative">
@@ -202,7 +221,7 @@ export default function AuthPage() {
                 placeholder="Email address"
                 required
                 autoComplete="email"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#ddd] dark:border-border bg-white dark:bg-card text-sm text-[#111] dark:text-foreground placeholder:text-[#bbb] dark:placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="w-full rounded-xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.5)] py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-[var(--muted-foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[rgba(139,92,246,0.3)]"
               />
             </div>
           </div>
@@ -210,14 +229,14 @@ export default function AuthPage() {
           {/* Password field */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-[#333] dark:text-foreground">
+              <label className="text-sm font-medium text-white">
                 Password
               </label>
               {mode === "signin" && (
                 <button
                   type="button"
                   onClick={handleForgotPassword}
-                  className="text-xs text-accent hover:underline cursor-pointer"
+                  className="cursor-pointer text-xs text-[var(--accent)] hover:underline"
                 >
                   Forgot password?
                 </button>
@@ -230,14 +249,14 @@ export default function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 required
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 minLength={6}
-                className="w-full px-4 py-2.5 pr-10 rounded-xl border border-[#ddd] dark:border-border bg-white dark:bg-card text-sm text-[#111] dark:text-foreground placeholder:text-[#bbb] dark:placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="w-full rounded-xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.5)] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-[var(--muted-foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[rgba(139,92,246,0.3)]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-[#999] dark:text-muted hover:text-[#666] dark:hover:text-foreground cursor-pointer"
+                className="absolute inset-y-0 right-0 flex cursor-pointer items-center pr-3.5 text-[var(--muted-foreground)] hover:text-white"
                 tabIndex={-1}
               >
                 {showPassword ? (
@@ -283,7 +302,7 @@ export default function AuthPage() {
         </form>
 
         {/* Toggle mode */}
-        <p className="text-sm text-[#666] dark:text-muted text-center mt-6">
+          <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
           {mode === "signin" ? (
             <>
               Don&apos;t have an account?{" "}
@@ -293,7 +312,7 @@ export default function AuthPage() {
                   setError("");
                   setResetSent(false);
                 }}
-                className="text-accent font-medium hover:underline cursor-pointer"
+                className="cursor-pointer font-medium text-[var(--accent)] hover:underline"
               >
                 Sign up
               </button>
@@ -307,13 +326,25 @@ export default function AuthPage() {
                   setError("");
                   setResetSent(false);
                 }}
-                className="text-accent font-medium hover:underline cursor-pointer"
+                className="cursor-pointer font-medium text-[var(--accent)] hover:underline"
               >
                 Sign in
               </button>
             </>
           )}
         </p>
+
+        <div className="mt-4 text-center text-xs text-[var(--muted-foreground)]">
+          {authIntent === "admin" ? (
+            <Link href="/app" className="font-medium text-[var(--accent)] hover:underline">
+              Back to user workspace sign in
+            </Link>
+          ) : (
+            <Link href="/admin" className="font-medium text-[var(--accent)] hover:underline">
+              Admin sign in
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

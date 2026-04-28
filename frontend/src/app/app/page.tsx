@@ -5,27 +5,123 @@ import PromptInput from "@/components/PromptInput";
 import ResearchProgress from "@/components/ResearchProgress";
 import ReportView from "@/components/ReportView";
 import AuthPage from "@/components/AuthPage";
-import MyFilesSection from "@/components/MyFilesSection";
-import MyNotesSection from "@/components/MyNotesSection";
-import TeamMembersSection from "@/components/TeamMembersSection";
-import GuideSection from "@/components/GuideSection";
+import LogoMark from "@/components/LogoMark";
 import { useResearch } from "@/hooks/useResearch";
-import { useWorkspaceData } from "@/hooks/useWorkspaceData";
-import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MARKETING_COMMANDS, type MarketingCommand } from "@/lib/marketingSkills";
+import { formatMarketingTarget } from "@/lib/marketingDisplay";
 
-const SUGGESTIONS = [
-  "Current trends in e-commerce payment solutions",
-  "Key pain points for Shopify users",
-  "AI startup landscape in healthcare",
-  "Competitor analysis for project management tools",
+const TRUSTED_LOGOS = ["Wiley", "Taylor & Francis", "Sage", "ACS Publications"];
+const MAIL_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SIGNAL_PRIORITIES =
+  "All major demand, competitor, product, and regulatory signals with market-moving impact.";
+const DEFAULT_DECISION_GOALS =
+  "Overall market direction, positioning, roadmap priorities, and near-term growth bets.";
+const DEFAULT_NOISE_FILTERS =
+  "Low-credibility rumors, duplicate stories, weakly sourced social chatter, and non-material updates.";
+
+const MAIL_PRESETS = [
+  { market: "AI / ML", niche: "Foundation models and AI platforms", signals: "model releases, pricing, benchmarks, partnerships", goals: "positioning, roadmap, buyer demand" },
+  { market: "AI / ML", niche: "AI developer tools and copilots", signals: "product launches, integrations, workflows, funding", goals: "product strategy, pricing, distribution" },
+  { market: "SaaS", niche: "B2B workflow automation", signals: "new features, adoption, churn, pricing", goals: "retention, GTM, upsell strategy" },
+  { market: "SaaS", niche: "Vertical SaaS for operations teams", signals: "vertical expansion, customer wins, category shifts", goals: "segmentation, packaging, vertical focus" },
+  { market: "Fintech", niche: "Payments and billing infrastructure", signals: "API launches, fees, banking partners, regulation", goals: "pricing, partnerships, risk" },
+  { market: "Fintech", niche: "Lending, credit, and underwriting", signals: "delinquency trends, regulations, underwriting models", goals: "risk, compliance, underwriting strategy" },
+  { market: "Ecommerce", niche: "Shopify apps and merchant tools", signals: "app releases, merchant pain points, app-store trends", goals: "product gaps, partner strategy" },
+  { market: "Ecommerce", niche: "Marketplaces and retail commerce", signals: "seller behavior, fees, logistics, conversion trends", goals: "market expansion, merchandising" },
+  { market: "Healthcare", niche: "Digital health and clinical workflows", signals: "clinical evidence, reimbursement, regulation", goals: "go-to-market, compliance, trust" },
+  { market: "Healthcare", niche: "Health tech software for providers", signals: "integration, workflow, procurement, regulation", goals: "buyer adoption, sales strategy" },
+  { market: "Cybersecurity", niche: "SMB security and identity", signals: "breaches, policy updates, product launches", goals: "defense posture, packaging, urgency" },
+  { market: "Cybersecurity", niche: "Cloud security and DevSecOps", signals: "platform changes, benchmarks, ecosystem moves", goals: "enterprise demand, platform fit" },
+  { market: "Gaming", niche: "Mobile free-to-play growth", signals: "UA changes, retention, monetization, app-store moves", goals: "growth, monetization, cohort performance" },
+  { market: "Gaming", niche: "PC and console publishing", signals: "launch windows, creator sentiment, platform policy", goals: "release planning, audience fit" },
+  { market: "Creator Economy", niche: "Newsletter, podcast, and media monetization", signals: "creator tools, ad rates, platform changes", goals: "revenue, distribution, retention" },
+  { market: "Education", niche: "EdTech for schools and universities", signals: "procurement, policy, adoption, budget shifts", goals: "institutional sales, compliance" },
+  { market: "Education", niche: "Learning platforms and tutoring", signals: "engagement, pricing, curriculum demand", goals: "product-market fit, retention" },
+  { market: "Real Estate", niche: "PropTech and real estate ops", signals: "housing demand, rates, workflow automation", goals: "market timing, segmentation" },
+  { market: "Logistics", niche: "Supply chain and freight software", signals: "capacity, costs, route optimization, automation", goals: "ops efficiency, margin control" },
+  { market: "Manufacturing", niche: "Industrial software and automation", signals: "capex, AI adoption, plant modernization", goals: "productization, procurement" },
+  { market: "Climate", niche: "Energy, carbon, and sustainability tech", signals: "policy, incentives, infrastructure, adoption", goals: "market entry, funding thesis" },
+  { market: "Legal", niche: "Legal tech and contract workflows", signals: "firm adoption, automation, compliance", goals: "efficiency, document risk" },
+  { market: "HR / People", niche: "Recruiting, payroll, and workforce software", signals: "hiring cycles, compliance, HR stack changes", goals: "talent ops, retention, automation" },
+  { market: "Travel", niche: "Travel booking and hospitality tech", signals: "demand, pricing, platform changes, seasonality", goals: "demand capture, partnerships" },
+  { market: "Media", niche: "Streaming, publishing, and adtech", signals: "content launches, ad spend, platform policy", goals: "audience, monetization, distribution" },
+  { market: "Consumer", niche: "Health, wellness, and lifestyle brands", signals: "retail demand, creator influence, pricing", goals: "brand positioning, channel strategy" },
+  { market: "Web3", niche: "Blockchain infrastructure and wallets", signals: "protocol updates, regulation, liquidity", goals: "ecosystem fit, risk" },
+  { market: "Construction", niche: "Construction tech and field operations", signals: "project demand, labor shortages, software adoption", goals: "ops efficiency, scheduling" },
+  { market: "Energy", niche: "Power, grid, and electrification", signals: "utility policy, infrastructure, supply constraints", goals: "market timing, capital allocation" },
+  { market: "Hardware", niche: "Consumer devices and IoT", signals: "component costs, launches, channel trends", goals: "supply chain, launch strategy" },
 ];
 
-const MARKETING_SUGGESTIONS = MARKETING_COMMANDS.slice(0, 6);
+const MAIL_MARKET_OPTIONS = Array.from(new Set(MAIL_PRESETS.map((preset) => preset.market)));
 
-type DashboardView = "research" | "files" | "notes" | "team" | "guide";
+function applyMailPreset(
+  preset: (typeof MAIL_PRESETS)[number],
+  setMailForm: React.Dispatch<React.SetStateAction<MailSetupFormState>>
+): void {
+  setMailForm((current) => ({
+    ...current,
+    market: preset.market,
+    nicheFocus: preset.niche,
+    signalPriorities: preset.signals,
+    decisionGoals: preset.goals,
+  }));
+}
+
+interface MailProfile {
+  id: string;
+  market: string;
+  nicheFocus: string;
+  geography: string;
+  businessContext: string;
+  competitors: string;
+  signalPriorities: string;
+  decisionGoals: string;
+  noiseFilters: string;
+}
+
+interface MailSetupFormState {
+  market: string;
+  nicheFocus: string;
+  geography: string;
+  businessContext: string;
+  competitors: string;
+  signalPriorities: string;
+  decisionGoals: string;
+  noiseFilters: string;
+}
+
+const EMPTY_MAIL_FORM: MailSetupFormState = {
+  market: "",
+  nicheFocus: "",
+  geography: "",
+  businessContext: "",
+  competitors: "",
+  signalPriorities: "",
+  decisionGoals: "",
+  noiseFilters: "",
+};
+
+function buildStorageKey(uid: string, suffix: string): string {
+  return `brief.mail.${uid}.${suffix}`;
+}
+
+function buildMailResearchInput(profile: MailProfile): string {
+  return [
+    `Profile ID: ${profile.id}`,
+    `Market: ${profile.market}`,
+    `Niche focus: ${profile.nicheFocus}`,
+    `Geography: ${profile.geography}`,
+    `Business context: ${profile.businessContext}`,
+    `Competitors to monitor: ${profile.competitors}`,
+    `Signal priorities: ${profile.signalPriorities}`,
+    `Decision goals: ${profile.decisionGoals}`,
+    `Noise filters: ${profile.noiseFilters}`,
+    "Create a fact-checked deep market briefing with verified, probable, and uncertain classification.",
+    "Return strategic implications and concrete actions for this week, 30 days, and quarter.",
+  ].join("\n");
+}
 
 export default function Dashboard() {
   const { user, loading, signOut } = useAuth();
@@ -40,42 +136,285 @@ export default function Dashboard() {
     deleteSession,
   } = useResearch(user);
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailForm, setMailForm] = useState<MailSetupFormState>(EMPTY_MAIL_FORM);
+  const [mailFormError, setMailFormError] = useState("");
+  const [mailProfile, setMailProfile] = useState<MailProfile | null>(null);
+  const [mailRunning, setMailRunning] = useState(false);
+  const [mailLastRunAt, setMailLastRunAt] = useState<number | null>(null);
+  const [mailNextRunAt, setMailNextRunAt] = useState<number | null>(null);
+  const [mailLastViewedAt, setMailLastViewedAt] = useState(0);
+  const [mailPresetQuery, setMailPresetQuery] = useState("");
+  const [selectedMailSessionId, setSelectedMailSessionId] = useState<string | null>(null);
+  const [mailExporting, setMailExporting] = useState<"md" | "html" | "pdf" | null>(null);
+  const [mailExportError, setMailExportError] = useState("");
+
+  const deepResearchCommand = useMemo(
+    () => MARKETING_COMMANDS.find((cmd) => cmd.id === "deepresearch") || null,
+    []
+  );
+
+  const userId = user?.uid || null;
+
   const handleMarketingCommand = (cmd: MarketingCommand, arg: string) => {
     startMarketingCommand(cmd, arg);
   };
 
-  const {
-    folders,
-    files,
-    notes,
-    teamMembers,
-    loadingFolders,
-    loadingFiles,
-    loadingNotes,
-    loadingTeamMembers,
-    createFolder,
-    uploadFile,
-    deleteFile,
-    createNote,
-    createTeamMember,
-  } = useWorkspaceData(user);
+  const runMailResearch = useMemo(() => {
+    return () => {
+      if (!mailProfile || !deepResearchCommand || mailRunning) return;
+      const now = Date.now();
+      setMailRunning(true);
+      setMailLastRunAt(now);
+      setMailNextRunAt(now + MAIL_INTERVAL_MS);
+      void startMarketingCommand(
+        deepResearchCommand,
+        buildMailResearchInput(mailProfile),
+        { forceNewSession: true }
+      );
+    };
+  }, [deepResearchCommand, mailProfile, mailRunning, startMarketingCommand]);
 
-  const { theme, toggle } = useTheme();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeView, setActiveView] = useState<DashboardView>("research");
+  useEffect(() => {
+    if (!userId) return;
+    const rawProfile = window.localStorage.getItem(buildStorageKey(userId, "profile"));
+    const rawLastRun = window.localStorage.getItem(buildStorageKey(userId, "lastRunAt"));
+    const rawNextRun = window.localStorage.getItem(buildStorageKey(userId, "nextRunAt"));
+    const rawViewed = window.localStorage.getItem(buildStorageKey(userId, "lastViewedAt"));
 
-  const navItems: { id: DashboardView; label: string }[] = [
-    { id: "research", label: "Research" },
-    { id: "files", label: "My Files" },
-    { id: "notes", label: "My Notes" },
-    { id: "team", label: "Team Members" },
-    { id: "guide", label: "Guide & FAQ" },
-  ];
+    if (rawProfile) {
+      try {
+        setMailProfile(JSON.parse(rawProfile) as MailProfile);
+      } catch {
+        setMailProfile(null);
+      }
+    } else {
+      setMailProfile(null);
+    }
+
+    setMailLastRunAt(rawLastRun ? Number(rawLastRun) : null);
+    setMailNextRunAt(rawNextRun ? Number(rawNextRun) : null);
+    setMailLastViewedAt(rawViewed ? Number(rawViewed) : 0);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (mailProfile) {
+      window.localStorage.setItem(buildStorageKey(userId, "profile"), JSON.stringify(mailProfile));
+    } else {
+      window.localStorage.removeItem(buildStorageKey(userId, "profile"));
+    }
+  }, [mailProfile, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (typeof mailLastRunAt === "number") {
+      window.localStorage.setItem(buildStorageKey(userId, "lastRunAt"), String(mailLastRunAt));
+    }
+    if (typeof mailNextRunAt === "number") {
+      window.localStorage.setItem(buildStorageKey(userId, "nextRunAt"), String(mailNextRunAt));
+    }
+    window.localStorage.setItem(buildStorageKey(userId, "lastViewedAt"), String(mailLastViewedAt));
+  }, [mailLastRunAt, mailNextRunAt, mailLastViewedAt, userId]);
+
+  const mailSessions = useMemo(() => {
+    if (!mailProfile) return [];
+    const marker = `Profile ID: ${mailProfile.id}`;
+    return sessions
+      .filter(
+        (session) =>
+          session.marketing?.commandId === "deepresearch" &&
+          session.query.includes(marker) &&
+          Boolean(session.report)
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [mailProfile, sessions]);
+
+  const unreadMailCount = useMemo(
+    () => mailSessions.filter((session) => session.createdAt.getTime() > mailLastViewedAt).length,
+    [mailLastViewedAt, mailSessions]
+  );
+
+  const selectedMailSession = useMemo(() => {
+    if (!mailSessions.length) return null;
+    if (selectedMailSessionId) {
+      const matched = mailSessions.find((session) => session.id === selectedMailSessionId);
+      if (matched) return matched;
+    }
+    return mailSessions[0];
+  }, [mailSessions, selectedMailSessionId]);
+
+  const filteredMailPresets = useMemo(() => {
+    const query = mailPresetQuery.trim().toLowerCase();
+    if (!query) return MAIL_PRESETS;
+
+    return MAIL_PRESETS.filter((preset) => {
+      const haystack = `${preset.market} ${preset.niche} ${preset.signals} ${preset.goals}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [mailPresetQuery]);
+
+  useEffect(() => {
+    if (!mailRunning || !mailProfile || !mailSessions.length) return;
+    if (mailSessions[0].phase === "finished" && mailSessions[0].report) {
+      setMailRunning(false);
+    }
+  }, [mailProfile, mailRunning, mailSessions]);
+
+  useEffect(() => {
+    if (!mailSessions.length) {
+      setSelectedMailSessionId(null);
+      return;
+    }
+
+    if (selectedMailSessionId && mailSessions.some((session) => session.id === selectedMailSessionId)) {
+      return;
+    }
+
+    setSelectedMailSessionId(mailSessions[0].id);
+  }, [mailSessions, selectedMailSessionId]);
+
+  useEffect(() => {
+    if (!mailProfile || !deepResearchCommand) return;
+
+    if (!mailSessions.length && !mailRunning) {
+      runMailResearch();
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      if (mailRunning) return;
+      if (typeof mailNextRunAt !== "number") return;
+      if (Date.now() >= mailNextRunAt) runMailResearch();
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, [deepResearchCommand, mailNextRunAt, mailProfile, mailRunning, mailSessions.length, runMailResearch]);
+
+  const completeMailSetup = () => {
+    setMailFormError("");
+    const normalizedMarket = mailForm.market.trim();
+    const normalizedNiche =
+      mailForm.nicheFocus.trim() || `All related niches in ${normalizedMarket}`;
+    const normalizedCompetitors =
+      mailForm.competitors.trim() ||
+      "All major competitors, challengers, and substitutes in this market.";
+    const normalizedSignalPriorities =
+      mailForm.signalPriorities.trim() || DEFAULT_SIGNAL_PRIORITIES;
+    const normalizedDecisionGoals =
+      mailForm.decisionGoals.trim() || DEFAULT_DECISION_GOALS;
+    const normalizedNoiseFilters =
+      mailForm.noiseFilters.trim() || DEFAULT_NOISE_FILTERS;
+
+    if (!normalizedMarket) {
+      setMailFormError("Market is required (for example: tech, AI, sports, fintech, gaming).\n");
+      return;
+    }
+
+    if (
+      !mailForm.geography.trim() ||
+      !mailForm.businessContext.trim()
+    ) {
+      setMailFormError("Please complete all required setup fields for a high-quality daily brief.");
+      return;
+    }
+
+    const profile: MailProfile = {
+      id: crypto.randomUUID(),
+      market: normalizedMarket,
+      nicheFocus: normalizedNiche,
+      geography: mailForm.geography.trim(),
+      businessContext: mailForm.businessContext.trim(),
+      competitors: normalizedCompetitors,
+      signalPriorities: normalizedSignalPriorities,
+      decisionGoals: normalizedDecisionGoals,
+      noiseFilters: normalizedNoiseFilters,
+    };
+
+    setMailProfile(profile);
+    setMailForm(EMPTY_MAIL_FORM);
+    setMailOpen(true);
+    setMailLastViewedAt(0);
+    setMailRunning(false);
+    setMailLastRunAt(null);
+    setMailNextRunAt(null);
+
+    window.setTimeout(() => {
+      runMailResearch();
+    }, 120);
+  };
+
+  const openMailCenter = () => {
+    setMailOpen(true);
+  };
+
+  const openMailReport = (sessionId: string) => {
+    setSelectedMailSessionId(sessionId);
+    const selected = mailSessions.find((session) => session.id === sessionId);
+    if (selected) {
+      setMailLastViewedAt(Math.max(mailLastViewedAt, selected.createdAt.getTime()));
+    }
+  };
+
+  const markAllMailRead = () => {
+    if (!mailSessions.length) return;
+    const latestTimestamp = mailSessions[0].createdAt.getTime();
+    setMailLastViewedAt(Math.max(mailLastViewedAt, latestTimestamp));
+  };
+
+  const downloadSelectedMailReport = async (format: "md" | "html" | "pdf") => {
+    if (!selectedMailSession?.report) return;
+    setMailExportError("");
+    setMailExporting(format);
+
+    try {
+      const response = await fetch("/api/research/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          report: {
+            ...selectedMailSession.report,
+            createdAt: selectedMailSession.report.createdAt.toISOString(),
+          },
+          scores: selectedMailSession.marketing?.scores,
+          overallScore: selectedMailSession.marketing?.overallScore,
+          grade: selectedMailSession.marketing?.grade,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error || "Export failed.");
+      }
+
+      const blob = await response.blob();
+      const fileNameBase = (selectedMailSession.report.query || "deep-research-brief")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "deep-research-brief";
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileNameBase}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMailExportError(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setMailExporting(null);
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
       </div>
     );
   }
@@ -83,31 +422,38 @@ export default function Dashboard() {
   if (!user) {
     return <AuthPage />;
   }
-  const isIdle = !activeSession;
+
+  const mailMarker = mailProfile ? `Profile ID: ${mailProfile.id}` : null;
+  const isMailManagedActiveSession = Boolean(
+    mailMarker &&
+      activeSession?.marketing?.commandId === "deepresearch" &&
+      activeSession.query.includes(mailMarker)
+  );
+  const visibleActiveSession = isMailManagedActiveSession ? null : activeSession;
+
+  const isIdle = !visibleActiveSession;
   const isWorking =
-    activeSession &&
-    activeSession.phase !== "idle" &&
-    activeSession.phase !== "finished";
-  const isDone = activeSession?.phase === "finished" && activeSession.report;
+    visibleActiveSession &&
+    visibleActiveSession.phase !== "idle" &&
+    visibleActiveSession.phase !== "finished";
+  const isDone = visibleActiveSession?.phase === "finished" && visibleActiveSession.report;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar */}
-      {sidebarOpen && (
+    <div className="relative flex h-screen overflow-hidden bg-background text-white">
+      <div className="pointer-events-none absolute left-[-180px] top-1/3 h-[440px] w-[440px] rounded-full bg-gradient-to-tr from-[rgba(139,92,246,0.22)] to-transparent blur-3xl" />
+      <div className="pointer-events-none absolute right-[-140px] top-[-120px] h-[360px] w-[360px] rounded-full bg-gradient-to-b from-[rgba(139,92,246,0.16)] to-transparent blur-3xl" />
+
+      {sidebarOpen ? (
         <Sidebar
           sessions={sessions}
           activeId={activeId}
           onSelect={(id) => {
-            setActiveView("research");
             selectSession(id);
           }}
           onDeleteSession={async (id) => {
             const session = sessions.find((item) => item.id === id);
             const label = session?.query || "this research session";
-            const shouldDelete = window.confirm(
-              `Delete ${label}? This cannot be undone.`
-            );
-
+            const shouldDelete = window.confirm(`Delete ${label}? This cannot be undone.`);
             if (!shouldDelete) return;
 
             try {
@@ -121,208 +467,469 @@ export default function Dashboard() {
             }
           }}
           onNewResearch={() => {
-            setActiveView("research");
             newResearch();
           }}
+          onHome={() => newResearch()}
           onSignOut={signOut}
         />
-      )}
+      ) : null}
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
-        <header className="flex items-center justify-between h-14 px-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center min-w-0">
+      <div className="relative z-10 flex-1 min-w-0 overflow-y-auto">
+        <div className="sticky top-0 z-20 flex h-14 items-center border-b border-[rgba(139,92,246,0.12)] bg-[rgba(20,20,40,0.72)] px-4 backdrop-blur-md">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-surface text-muted cursor-pointer"
+              className="rounded-lg p-2 text-[var(--muted-foreground)] hover:bg-[rgba(139,92,246,0.08)] hover:text-[var(--foreground)]"
               aria-label="Toggle sidebar"
             >
-              <svg
-                className="w-5 h-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12h18M3 6h18M3 18h18" />
               </svg>
             </button>
-            {activeView === "research" && activeSession && (
-              <p className="ml-3 text-sm text-muted truncate">
-                {activeSession.query}
-              </p>
-            )}
-            {activeView !== "research" && (
-              <p className="ml-3 text-sm text-muted truncate">
-                {navItems.find((item) => item.id === activeView)?.label}
-              </p>
-            )}
+            <span className="text-sm text-[var(--muted-foreground)]">Research Workspace</span>
           </div>
-          <button
-            onClick={toggle}
-            className="p-2 rounded-lg hover:bg-surface text-muted cursor-pointer"
-            aria-label="Toggle dark mode"
-          >
-            {theme === "light" ? (
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={openMailCenter}
+              className="relative rounded-full border border-[rgba(139,92,246,0.2)] bg-[rgba(139,92,246,0.08)] p-2 text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.14)]"
+              aria-label="Open Mail notifications"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-            ) : (
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="5" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-            )}
-          </button>
-        </header>
-
-        <div className="border-b border-border px-4 py-2">
-          <div className="flex flex-wrap gap-2">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveView(item.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  activeView === item.id
-                    ? "bg-accent/10 text-accent"
-                    : "text-muted hover:bg-surface hover:text-foreground"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+              {unreadMailCount > 0 ? (
+                <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[10px] font-semibold text-white">
+                  {unreadMailCount > 9 ? "9+" : unreadMailCount}
+                </span>
+              ) : null}
+            </button>
+            <button
+              onClick={() => setMailOpen(true)}
+              className="rounded-full border border-[rgba(139,92,246,0.2)] bg-[rgba(139,92,246,0.08)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.14)]"
+            >
+              Mail
+            </button>
           </div>
         </div>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto">
-          {activeView === "files" && (
-            <MyFilesSection
-              folders={folders}
-              files={files}
-              loadingFolders={loadingFolders}
-              loadingFiles={loadingFiles}
-              onCreateFolder={createFolder}
-              onUploadFile={uploadFile}
-              onDeleteFile={deleteFile}
-            />
-          )}
-
-          {activeView === "notes" && (
-            <MyNotesSection
-              notes={notes}
-              loadingNotes={loadingNotes}
-              onCreateNote={createNote}
-            />
-          )}
-
-          {activeView === "team" && (
-            <TeamMembersSection
-              members={teamMembers}
-              loadingMembers={loadingTeamMembers}
-              onCreateMember={createTeamMember}
-            />
-          )}
-
-          {activeView === "guide" && <GuideSection />}
-
-          {/* IDLE STATE — centered prompt */}
-          {activeView === "research" && isIdle && (
-            <div className="flex flex-col items-center justify-center h-full px-6">
-              <div className="mb-10 text-center">
-                <h1 className="text-3xl font-semibold text-foreground tracking-tight mb-2">
-                  What do you want to research?
-                </h1>
-                <p className="text-muted text-base">
-                  Enter a topic and Brief will scan the market for you.
-                </p>
-              </div>
-
-              <PromptInput onSubmit={startResearch} onMarketingCommand={handleMarketingCommand} />
-
-              {/* Research suggestion chips */}
-              <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-2xl">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => startResearch(s)}
-                    className="px-4 py-2 rounded-full text-sm text-muted border border-border hover:border-accent/40 hover:text-foreground hover:bg-accent-light/30 cursor-pointer"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-
-              {/* Marketing command chips */}
-              <div className="mt-4">
-                <p className="text-xs text-muted text-center mb-2">or run a marketing command</p>
-                <div className="flex flex-wrap gap-2 justify-center max-w-2xl">
-                  {MARKETING_SUGGESTIONS.map((cmd) => (
-                    <button
-                      key={cmd.id}
-                      onClick={() => handleMarketingCommand(cmd, cmd.placeholder)}
-                      className="px-3 py-1.5 rounded-full text-xs text-muted border border-border hover:border-accent/40 hover:text-foreground hover:bg-accent-light/30 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>{cmd.icon}</span>
-                      {cmd.label}
-                    </button>
-                  ))}
+        {mailOpen ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/45 p-4">
+            <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-[rgba(139,92,246,0.25)] bg-[rgba(10,10,26,0.96)] shadow-[0_30px_90px_rgba(0,0,0,0.55)] backdrop-blur-xl max-h-[calc(100vh-2rem)]">
+              <div className="flex items-center justify-between border-b border-[rgba(139,92,246,0.16)] px-6 py-4">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Mail Intelligence</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">Daily fact-checked deep-research briefings with premium depth and reliability.</p>
                 </div>
+                <button
+                  onClick={() => setMailOpen(false)}
+                  className="rounded-lg p-2 text-[var(--muted-foreground)] hover:bg-[rgba(139,92,246,0.1)] hover:text-[var(--foreground)]"
+                  aria-label="Close Mail"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="max-h-[calc(100vh-8rem)] overflow-y-auto">
+              {!mailProfile ? (
+                <div className="grid gap-5 p-6 md:grid-cols-2">
+                  <div className="glass-panel rounded-2xl p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Setup</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[var(--foreground)]">Configure Your Daily Market Mail</h2>
+                    <p className="mt-2 text-sm text-[var(--muted-foreground)]">Answer the questions once. Brief will launch your first report immediately and then refresh every 24 hours.</p>
+                  </div>
+
+                  <div className="glass-panel-strong rounded-2xl p-5">
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.35)] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Quick start library</p>
+                            <p className="text-xs text-[var(--muted-foreground)]">Pick a market and niche to auto-fill the brief setup.</p>
+                          </div>
+                          <input
+                            value={mailPresetQuery}
+                            onChange={(event) => setMailPresetQuery(event.target.value)}
+                            placeholder="Search niches"
+                            className="w-40 rounded-lg border border-[rgba(139,92,246,0.18)] bg-[rgba(20,20,40,0.6)] px-2 py-1 text-xs text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {MAIL_MARKET_OPTIONS.map((market) => (
+                            <button
+                              key={market}
+                              type="button"
+                              onClick={() => setMailForm((current) => ({ ...current, market }))}
+                              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${mailForm.market === market ? "border-[var(--accent)] bg-[rgba(139,92,246,0.18)] text-white" : "border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.5)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"}`}
+                            >
+                              {market}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                          {filteredMailPresets.slice(0, 18).map((preset) => {
+                            const isActive = mailForm.market === preset.market && mailForm.nicheFocus === preset.niche;
+                            return (
+                              <button
+                                key={`${preset.market}-${preset.niche}`}
+                                type="button"
+                                onClick={() => applyMailPreset(preset, setMailForm)}
+                                className={`rounded-xl border px-3 py-3 text-left transition ${isActive ? "border-[var(--accent)] bg-[rgba(139,92,246,0.18)]" : "border-[rgba(139,92,246,0.12)] bg-[rgba(20,20,40,0.48)] hover:bg-[rgba(139,92,246,0.08)]"}`}
+                              >
+                                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">{preset.market}</p>
+                                <p className="mt-1 text-sm font-medium text-[var(--foreground)]">{preset.niche}</p>
+                                <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">Signals: {preset.signals}</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {filteredMailPresets.length > 18 ? (
+                          <p className="mt-2 text-[11px] text-[var(--muted-foreground)]">Showing 18 of {filteredMailPresets.length} matches. Use search to narrow down.</p>
+                        ) : null}
+                      </div>
+
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">1. What market are you interested in? (required)</span>
+                        <input list="mail-market-options" value={mailForm.market} onChange={(event) => setMailForm((prev) => ({ ...prev, market: event.target.value }))} placeholder="tech, AI, sports, fintech, gaming" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                        <datalist id="mail-market-options">
+                          {MAIL_MARKET_OPTIONS.map((market) => (
+                            <option key={market} value={market} />
+                          ))}
+                        </datalist>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">2. Which sub-niche matters most? (required)</span>
+                        <input value={mailForm.nicheFocus} onChange={(event) => setMailForm((prev) => ({ ...prev, nicheFocus: event.target.value }))} placeholder="Example: AI developer productivity" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMailForm((prev) => ({
+                                ...prev,
+                                nicheFocus: prev.market.trim()
+                                  ? `All related niches in ${prev.market.trim()}`
+                                  : "All related niches in this market",
+                              }))
+                            }
+                            className="rounded-full border border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.55)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Use All Related Niches
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMailForm((prev) => ({ ...prev, nicheFocus: "" }))}
+                            className="rounded-full border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.45)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Leave blank and auto-fill
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">If left empty, Brief will use a broad all-related niche scope automatically.</p>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">3. Geography focus? (required)</span>
+                        <input value={mailForm.geography} onChange={(event) => setMailForm((prev) => ({ ...prev, geography: event.target.value }))} placeholder="Global, US, EU, MENA, etc." className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">4. Your business context? (required)</span>
+                        <input value={mailForm.businessContext} onChange={(event) => setMailForm((prev) => ({ ...prev, businessContext: event.target.value }))} placeholder="Example: SaaS founder deciding GTM bets" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">5. Competitors to watch</span>
+                        <input value={mailForm.competitors} onChange={(event) => setMailForm((prev) => ({ ...prev, competitors: event.target.value }))} placeholder="Comma-separated competitors" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMailForm((prev) => ({
+                                ...prev,
+                                competitors:
+                                  "All major competitors, challengers, and substitutes in this market.",
+                              }))
+                            }
+                            className="rounded-full border border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.55)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Use All Competitors
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMailForm((prev) => ({ ...prev, competitors: "" }))}
+                            className="rounded-full border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.45)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Leave blank and auto-fill
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">If blank, Brief will scan all major and emerging competitors for you.</p>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">6. Priority signals to track? (required)</span>
+                        <input value={mailForm.signalPriorities} onChange={(event) => setMailForm((prev) => ({ ...prev, signalPriorities: event.target.value }))} placeholder="pricing shifts, product launches, partnerships, regulation" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMailForm((prev) => ({
+                                ...prev,
+                                signalPriorities: DEFAULT_SIGNAL_PRIORITIES,
+                              }))
+                            }
+                            className="rounded-full border border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.55)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Use All Priority Signals
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMailForm((prev) => ({ ...prev, signalPriorities: "" }))}
+                            className="rounded-full border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.45)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Leave blank and auto-fill
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">If blank, Brief will monitor broad high-impact signal categories automatically.</p>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">7. What decisions should this report support? (required)</span>
+                        <input value={mailForm.decisionGoals} onChange={(event) => setMailForm((prev) => ({ ...prev, decisionGoals: event.target.value }))} placeholder="positioning, roadmap, pricing, partner strategy" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMailForm((prev) => ({
+                                ...prev,
+                                decisionGoals: DEFAULT_DECISION_GOALS,
+                              }))
+                            }
+                            className="rounded-full border border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.55)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Use Broad Decision Support
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMailForm((prev) => ({ ...prev, decisionGoals: "" }))}
+                            className="rounded-full border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.45)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Leave blank and auto-fill
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">If blank, Brief will optimize recommendations for core strategic decisions.</p>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-[var(--muted-foreground)]">8. What should be treated as noise?</span>
+                        <input value={mailForm.noiseFilters} onChange={(event) => setMailForm((prev) => ({ ...prev, noiseFilters: event.target.value }))} placeholder="rumors, low-credibility social posts, recycled stories" className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.58)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]" />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMailForm((prev) => ({
+                                ...prev,
+                                noiseFilters: DEFAULT_NOISE_FILTERS,
+                              }))
+                            }
+                            className="rounded-full border border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.55)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Use Standard Noise Filter
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMailForm((prev) => ({ ...prev, noiseFilters: "" }))}
+                            className="rounded-full border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.45)] px-3 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Leave blank and auto-fill
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">If blank, Brief applies a default reliability filter to reduce low-signal sources.</p>
+                      </label>
+                    </div>
+
+                    {mailFormError ? <p className="mt-3 text-sm text-red-400">{mailFormError}</p> : null}
+
+                    <div className="mt-4 flex justify-end">
+                      <button onClick={completeMailSetup} className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(139,92,246,0.26)]">
+                        Save Setup and Generate First Report
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6">
+                  <div className="mb-5 grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+                    <div className="glass-panel-strong rounded-2xl p-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Mail Profile</p>
+                      <h3 className="mt-2 text-xl font-semibold text-[var(--foreground)]">{mailProfile.market}</h3>
+                      <p className="mt-1 text-sm text-[var(--muted-foreground)]">{mailProfile.nicheFocus}</p>
+                      <div className="mt-4 grid gap-2 text-xs text-[var(--muted-foreground)] sm:grid-cols-2">
+                        <p><span className="text-[var(--foreground)]">Geo:</span> {mailProfile.geography}</p>
+                        <p><span className="text-[var(--foreground)]">Context:</span> {mailProfile.businessContext}</p>
+                        <p><span className="text-[var(--foreground)]">Signals:</span> {mailProfile.signalPriorities}</p>
+                        <p><span className="text-[var(--foreground)]">Goals:</span> {mailProfile.decisionGoals}</p>
+                      </div>
+                    </div>
+                    <div className="glass-panel rounded-2xl p-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Automation Status</p>
+                      <p className="mt-2 text-sm text-[var(--foreground)]">{mailRunning ? "Research in progress..." : "Daily 24h updates enabled"}</p>
+                      <p className="mt-2 text-xs text-[var(--muted-foreground)]">Last run: {mailLastRunAt ? new Date(mailLastRunAt).toLocaleString() : "Not run yet"}</p>
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">Next run: {mailNextRunAt ? new Date(mailNextRunAt).toLocaleString() : "Pending"}</p>
+                      {unreadMailCount > 0 ? (
+                        <p className="mt-2 inline-flex rounded-full border border-[rgba(139,92,246,0.28)] bg-[rgba(139,92,246,0.14)] px-2 py-1 text-[11px] font-semibold text-[var(--foreground)]">
+                          {unreadMailCount} full report{unreadMailCount === 1 ? "" : "s"} ready to download
+                        </p>
+                      ) : null}
+                      <button onClick={runMailResearch} disabled={mailRunning} className="mt-4 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.12)] px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.2)] disabled:opacity-50">{mailRunning ? "Running..." : "Run now"}</button>
+                    </div>
+                  </div>
+
+                  <div className="glass-panel rounded-2xl p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-[var(--foreground)]">Daily Reports Inbox</p>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-[rgba(139,92,246,0.16)] px-2 py-0.5 text-xs text-[var(--accent)]">{mailSessions.length} reports</span>
+                        {unreadMailCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={markAllMailRead}
+                            className="rounded-full border border-[rgba(139,92,246,0.2)] px-2 py-0.5 text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                          >
+                            Mark all read
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {mailSessions.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.35)] p-6 text-center">
+                        <p className="text-sm text-[var(--muted-foreground)]">First deep market report is being prepared. It will appear here automatically.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {mailSessions.map((session) => {
+                          const isUnread = session.createdAt.getTime() > mailLastViewedAt;
+                          const isSelected = session.id === selectedMailSession?.id;
+                          return (
+                            <button key={session.id} onClick={() => openMailReport(session.id)} className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${isSelected ? "border-[var(--accent)] bg-[rgba(139,92,246,0.16)]" : "border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.48)] hover:bg-[rgba(139,92,246,0.1)]"}`}>
+                              <div className="mt-0.5 h-8 w-8 shrink-0 rounded-lg bg-[linear-gradient(135deg,rgba(139,92,246,0.35),rgba(139,92,246,0.08))]" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-[var(--foreground)]">{session.report?.overview?.slice(0, 96) || session.query}</p>
+                                <p className="mt-1 text-xs text-[var(--muted-foreground)]">{new Date(session.createdAt).toLocaleString()}</p>
+                              </div>
+                              {isUnread ? <span className="mt-1 rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] font-semibold text-white">Full report ready</span> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {selectedMailSession?.report ? (
+                      <div className="mt-4 rounded-2xl border border-[rgba(139,92,246,0.16)] bg-[rgba(10,10,26,0.68)] p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <p className="text-sm font-semibold text-[var(--foreground)]">Full report ready</p>
+                          <span className="rounded-full border border-[rgba(139,92,246,0.2)] bg-[rgba(139,92,246,0.08)] px-2 py-0.5 text-[11px] text-[var(--muted-foreground)]">
+                            Downloadable in MD, HTML, PDF
+                          </span>
+                        </div>
+
+                        <p className="text-sm font-medium text-[var(--foreground)]">{selectedMailSession.report.query}</p>
+                        <p className="mt-2 text-xs text-[var(--muted-foreground)] line-clamp-3">{selectedMailSession.report.overview}</p>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => downloadSelectedMailReport("md")}
+                            disabled={Boolean(mailExporting)}
+                            className="rounded-lg border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:border-[rgba(139,92,246,0.5)] disabled:opacity-50"
+                          >
+                            {mailExporting === "md" ? "Exporting..." : "Download .md"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadSelectedMailReport("html")}
+                            disabled={Boolean(mailExporting)}
+                            className="rounded-lg border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:border-[rgba(139,92,246,0.5)] disabled:opacity-50"
+                          >
+                            {mailExporting === "html" ? "Exporting..." : "Download .html"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadSelectedMailReport("pdf")}
+                            disabled={Boolean(mailExporting)}
+                            className="rounded-lg bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            {mailExporting === "pdf" ? "Exporting..." : "Download .pdf"}
+                          </button>
+                        </div>
+
+                        {mailExportError ? <p className="mt-2 text-xs text-red-400">{mailExportError}</p> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
               </div>
             </div>
+          </div>
+        ) : null}
+
+        <main className="mx-auto flex min-h-[calc(100vh-56px)] w-full max-w-6xl flex-col px-4 pb-10 pt-8 sm:px-8">
+          {isIdle && (
+            <>
+              <section className="flex flex-1 flex-col items-center justify-center text-center">
+                <div className="mb-6 flex items-center gap-4">
+                  <LogoMark />
+                  <span className="text-4xl font-semibold tracking-tight text-white">Brief</span>
+                </div>
+                <h1 className="mb-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">What should we decode today?</h1>
+                <p className="mb-8 max-w-2xl text-sm text-[var(--muted-foreground)] sm:text-base">Start with one prompt. Brief will scan live sources, surface patterns, and deliver a source-backed strategy report.</p>
+                <div className="glass-panel-strong w-full rounded-3xl p-4 sm:p-6">
+                  <PromptInput onSubmit={startResearch} onMarketingCommand={handleMarketingCommand} canContinueInSkill={false} lastCommandLabel={undefined} />
+                </div>
+              </section>
+              <section className="mt-12 border-t border-[rgba(139,92,246,0.12)] pt-10 text-center">
+                <p className="mb-6 text-sm font-medium text-[var(--muted-foreground)]">Used by operators shipping in competitive markets</p>
+                <div className="flex flex-wrap items-center justify-center gap-3 text-sm font-semibold text-[var(--foreground)] sm:gap-4 sm:text-base">
+                  {TRUSTED_LOGOS.map((logo) => (
+                    <span key={logo} className="glass-panel rounded-full px-4 py-1.5 opacity-95">{logo}</span>
+                  ))}
+                </div>
+              </section>
+            </>
           )}
 
-          {/* WORKING STATE — research progress */}
-          {activeView === "research" && isWorking && activeSession && (
-            <div className="max-w-2xl mx-auto px-6 py-10">
-              {/* User query bubble */}
-              <div className="mb-6">
-                {activeSession.marketing ? (
+          {isWorking && visibleActiveSession && (
+            <section className="mx-auto w-full max-w-4xl py-4">
+              <div className="glass-panel-strong mb-6 rounded-2xl p-4">
+                {visibleActiveSession.marketing ? (
                   <>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">{activeSession.marketing.icon}</span>
-                      <span className="text-xs font-medium text-accent">{activeSession.marketing.commandLabel}</span>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="text-lg">{visibleActiveSession.marketing.icon}</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">{visibleActiveSession.marketing.commandLabel}</span>
                     </div>
-                    <p className="text-base font-medium text-foreground">
-                      {activeSession.marketing.arg}
-                    </p>
+                    <p className="text-base font-medium text-white">{formatMarketingTarget(visibleActiveSession.marketing)}</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-muted mb-1">Your research query</p>
-                    <p className="text-base font-medium text-foreground">
-                      {activeSession.query}
-                    </p>
+                    <p className="mb-1 text-xs text-[var(--muted-foreground)]">Your request</p>
+                    <p className="text-base font-medium text-white">{visibleActiveSession.query}</p>
                   </>
                 )}
               </div>
-
-              <ResearchProgress
-                steps={activeSession.steps}
-                sources={activeSession.sources}
-                currentPhase={activeSession.phase}
-                currentStepIndex={activeSession.currentStepIndex}
-                analysisLog={activeSession.analysisLog}
-              />
-            </div>
+              <ResearchProgress steps={visibleActiveSession.steps} sources={visibleActiveSession.sources} currentPhase={visibleActiveSession.phase} currentStepIndex={visibleActiveSession.currentStepIndex} analysisLog={visibleActiveSession.analysisLog} />
+            </section>
           )}
 
-          {/* DONE STATE — report */}
-          {activeView === "research" && isDone && activeSession?.report && (
-            <div className="max-w-2xl mx-auto px-6 py-10">
-              <ReportView report={activeSession.report} marketing={activeSession.marketing} />
-
-              {/* New research prompt at bottom */}
-              <div className="mt-12 mb-8">
-                <p className="text-sm text-muted mb-3 text-center">
-                  Have another question?
-                </p>
-                <PromptInput onSubmit={startResearch} onMarketingCommand={handleMarketingCommand} />
+          {isDone && visibleActiveSession?.report && (
+            <section className="mx-auto w-full max-w-4xl py-4">
+              <div className="glass-panel-strong rounded-2xl p-6">
+                <ReportView report={visibleActiveSession.report} marketing={visibleActiveSession.marketing} />
               </div>
-            </div>
+              <div className="mt-8">
+                <p className="mb-3 text-center text-sm text-[var(--muted-foreground)]">Need to refine this output?</p>
+                <div className="glass-panel-strong rounded-2xl p-4 sm:p-5">
+                  <PromptInput onSubmit={startResearch} onMarketingCommand={handleMarketingCommand} canContinueInSkill={Boolean(visibleActiveSession?.marketing)} lastCommandLabel={visibleActiveSession?.marketing?.commandLabel} />
+                </div>
+              </div>
+            </section>
           )}
         </main>
       </div>

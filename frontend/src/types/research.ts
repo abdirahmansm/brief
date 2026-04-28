@@ -62,6 +62,7 @@ export interface ResearchSession {
   sources: Source[];
   analysisLog?: string[];
   report: Report | null;
+  isRefining?: boolean;
   createdAt: Date;
   /** Present when the session was started via a /market command */
   marketing?: MarketingMeta;

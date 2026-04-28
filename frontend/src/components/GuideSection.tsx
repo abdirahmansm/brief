@@ -29,7 +29,7 @@ const PLAYBOOK: PlaybookStep[] = [
     action:
       "Ask Brief to test if the market has proven pain, purchase intent, and channel fit before you commit resources.",
     howBriefHelps:
-      "Brief cross-checks real market signals so you avoid slow, expensive guessing.",
+      "Brief cross-checks real market evidence so you avoid slow, expensive guessing.",
   },
   {
     timestamp: "02:31",
@@ -186,7 +186,7 @@ export default function GuideSection() {
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
           Brief is built to feel like a research strike team. Give it one market question and it can rapidly turn scattered
-          signals into strategy-ready insight. Use this playbook to move from idea to evidence, then from evidence to
+          evidence into strategy-ready insight. Use this playbook to move from idea to evidence, then from evidence to
           positioning.
         </p>
 

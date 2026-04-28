@@ -152,13 +152,13 @@ export default function MyFilesSection({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setFolderModalOpen(true)}
-            className="rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-surface"
+            className="rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-4 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)]"
           >
             New Folder
           </button>
           <button
             onClick={() => setFileModalOpen(true)}
-            className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90"
+            className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white shadow-[0_10px_24px_rgba(139,92,246,0.22)] hover:opacity-95"
           >
             Add File
           </button>
@@ -166,50 +166,50 @@ export default function MyFilesSection({
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted">Folders</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{folders.length}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Folders</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">{folders.length}</p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted">Files</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{files.length}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Files</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">{files.length}</p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted">Storage</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">Storage</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
             {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
           </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted">
+        <div className="glass-panel rounded-2xl p-10 text-center text-sm text-[var(--muted-foreground)]">
           Loading files...
         </div>
       ) : folders.length === 0 && files.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
-          <p className="text-base font-medium text-foreground">No files yet</p>
-          <p className="mt-2 text-sm text-muted">
+        <div className="rounded-2xl border border-dashed border-[rgba(139,92,246,0.22)] bg-[rgba(20,20,40,0.45)] p-12 text-center">
+          <p className="text-base font-medium text-[var(--foreground)]">No files yet</p>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
             Create your first folder or add a file to get started.
           </p>
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+          <div className="glass-panel rounded-2xl p-5">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Folders
             </h2>
             {folders.length === 0 ? (
-              <p className="text-sm text-muted">No folders created yet.</p>
+              <p className="text-sm text-[var(--muted-foreground)]">No folders created yet.</p>
             ) : (
               <div className="space-y-2">
                 {folders.map((folder) => (
                   <div
                     key={folder.id}
-                    className="rounded-xl border border-border px-4 py-3"
+                    className="rounded-xl border border-[rgba(139,92,246,0.16)] bg-[rgba(20,20,40,0.5)] px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-foreground">{folder.name}</p>
-                    <p className="mt-1 text-xs text-muted">
+                    <p className="text-sm font-medium text-[var(--foreground)]">{folder.name}</p>
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                       Created {formatDate(folder.createdAt)}
                     </p>
                   </div>
@@ -218,16 +218,16 @@ export default function MyFilesSection({
             )}
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+          <div className="glass-panel rounded-2xl p-5">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               Files
             </h2>
             {files.length === 0 ? (
-              <p className="text-sm text-muted">No files added yet.</p>
+              <p className="text-sm text-[var(--muted-foreground)]">No files added yet.</p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-border">
+              <div className="overflow-x-auto rounded-xl border border-[rgba(139,92,246,0.16)]">
                 <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead className="bg-surface text-xs uppercase tracking-wide text-muted">
+                  <thead className="bg-[rgba(139,92,246,0.08)] text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
                     <tr>
                       <th className="px-4 py-3 font-medium">Name</th>
                       <th className="px-4 py-3 font-medium">Type</th>
@@ -235,34 +235,34 @@ export default function MyFilesSection({
                       <th className="px-4 py-3 font-medium">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-[rgba(139,92,246,0.14)]">
                     {files.map((file) => (
                       <tr key={file.id} className="align-top">
                         <td className="px-4 py-3">
-                          <p className="font-medium text-foreground">{file.name}</p>
-                          <p className="mt-1 text-xs text-muted">
+                          <p className="font-medium text-[var(--foreground)]">{file.name}</p>
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                             {file.folderId && folderById.get(file.folderId)
                               ? `Folder: ${folderById.get(file.folderId)?.name}`
                               : "No folder"}
                             {` • Added ${formatDate(file.createdAt)}`}
                           </p>
                         </td>
-                        <td className="px-4 py-3 text-muted">{readableFileType(file.type)}</td>
-                        <td className="px-4 py-3 text-muted">{formatBytes(file.size)}</td>
+                        <td className="px-4 py-3 text-[var(--muted-foreground)]">{readableFileType(file.type)}</td>
+                        <td className="px-4 py-3 text-[var(--muted-foreground)]">{formatBytes(file.size)}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <a
                               href={file.downloadURL}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface"
+                              className="rounded-lg border border-[rgba(139,92,246,0.16)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)]"
                             >
                               Download
                             </a>
                             <button
                               onClick={() => handleDeleteFile(file)}
                               disabled={deletingFileId === file.id}
-                              className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              className="rounded-lg border border-red-300/50 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-50"
                             >
                               {deletingFileId === file.id ? "Deleting..." : "Delete"}
                             </button>
@@ -295,7 +295,7 @@ export default function MyFilesSection({
               value={folderName}
               onChange={(event) => setFolderName(event.target.value)}
               placeholder="e.g. Competitor Research"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             />
           </div>
           {folderError && <p className="text-sm text-red-500">{folderError}</p>}
@@ -303,14 +303,14 @@ export default function MyFilesSection({
             <button
               onClick={() => setFolderModalOpen(false)}
               disabled={folderSaving}
-              className="rounded-xl border border-border px-4 py-2 text-sm text-foreground hover:bg-surface disabled:opacity-50"
+              className="rounded-xl border border-[rgba(139,92,246,0.2)] px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)] disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleCreateFolder}
               disabled={folderSaving}
-              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {folderSaving ? "Creating..." : "Create"}
             </button>
@@ -325,37 +325,41 @@ export default function MyFilesSection({
       >
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
+            <label htmlFor="upload-file-input" className="mb-1.5 block text-sm font-medium text-foreground">
               Select file
             </label>
             <input
+              id="upload-file-input"
               ref={fileInputRef}
               type="file"
               onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+              title="Select file to upload"
               className="hidden"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
               type="button"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground hover:bg-surface"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)]"
             >
               {selectedFile ? selectedFile.name : "Choose a file"}
             </button>
             {selectedFile && (
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                 {readableFileType(selectedFile.type || "Unknown")} • {formatBytes(selectedFile.size)}
               </p>
             )}
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
+            <label htmlFor="upload-folder-select" className="mb-1.5 block text-sm font-medium text-foreground">
               Folder (optional)
             </label>
             <select
+              id="upload-folder-select"
               value={fileFolderId}
               onChange={(event) => setFileFolderId(event.target.value)}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60"
+              title="Choose target folder"
+              className="w-full rounded-xl border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
             >
               <option value="">No folder</option>
               {folders.map((folder) => (
@@ -370,13 +374,12 @@ export default function MyFilesSection({
             <label className="mb-1.5 block text-sm font-medium text-foreground">
               Upload progress
             </label>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
-              <div
-                className="h-full rounded-full bg-accent transition-all"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-            <p className="mt-1 text-xs text-muted">{uploadProgress}%</p>
+            <progress
+              value={uploadProgress}
+              max={100}
+              className="h-2 w-full overflow-hidden rounded-full [accent-color:oklch(0.55_0.24_262)]"
+            />
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">{uploadProgress}%</p>
           </div>
 
           {fileError && <p className="text-sm text-red-500">{fileError}</p>}
@@ -385,14 +388,14 @@ export default function MyFilesSection({
             <button
               onClick={() => setFileModalOpen(false)}
               disabled={fileSaving}
-              className="rounded-xl border border-border px-4 py-2 text-sm text-foreground hover:bg-surface disabled:opacity-50"
+              className="rounded-xl border border-[rgba(139,92,246,0.2)] px-4 py-2 text-sm text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)] disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleCreateFile}
               disabled={fileSaving}
-              className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {fileSaving ? "Saving..." : "Create"}
             </button>

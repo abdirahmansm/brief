@@ -106,6 +106,11 @@ project-root/
 └── .env # Environment variables for local development
 ```
 
+## 7. Workspace Skills
+
+- **UI/UX Design Skill**: `ai-marketing-claude/skills/ui-ux-pro-max/SKILL.md`
+  - Use this skill for UI/UX direction, design system generation, and frontend implementation quality checks.
+
 ## References
 
 [1] Firebase Pricing. (n.d.). _Firebase_. Retrieved from [https://firebase.google.com/pricing](https://firebase.google.com/pricing)

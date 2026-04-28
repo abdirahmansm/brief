@@ -5,6 +5,7 @@ interface ResearchRequestBody {
   query?: string;
   commandId?: string;
   commandArg?: string;
+  responseDepth?: "simple" | "deep";
 }
 
 export async function POST(request: Request) {
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
       query,
       commandId: body.commandId,
       commandArg: body.commandArg,
+      responseDepth: body.responseDepth,
     });
 
     return NextResponse.json({

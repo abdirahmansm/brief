@@ -41,7 +41,7 @@ const GUIDE_STEPS: GuideStep[] = [
   {
     timestamp: "04:52",
     title: "Collect proof points and trends",
-    action: "Request data points, market signals, and references to support each opportunity.",
+    action: "Request data points, market evidence, and references to support each opportunity.",
     support: "One of the key engines in Brief is Perplexity for live market context and source-backed discovery.",
   },
   {

@@ -70,7 +70,11 @@ export async function POST(request: Request) {
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
-      await page.setContent(artifacts.html, { waitUntil: "networkidle" });
+      await page.setContent(artifacts.html, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await page.emulateMedia({ media: "print" });
       const pdf = await page.pdf({
         format: "A4",
         printBackground: true,
