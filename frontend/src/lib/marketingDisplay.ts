@@ -2,6 +2,7 @@ import { MarketingMeta } from "@/types/research";
 
 const COMMAND_COPY: Record<string, string> = {
   audit: "Full multi-agent marketing audit",
+  fullmarketing: "Full marketing intelligence",
   quick: "Quick marketing snapshot",
   copy: "Copy analysis",
   emails: "Email sequence strategy",

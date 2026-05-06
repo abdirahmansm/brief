@@ -1,6 +1,7 @@
 import { MARKETING_COMMANDS } from "@/lib/marketingSkills";
 import { AuditScore, Report, ReportSection, Source } from "@/types/research";
 import { generateStructuredJson } from "@/lib/server/modelRouter";
+import { runFullMarketingAgent } from "@/lib/server/fullMarketingAgent";
 import commandSkills from "@/lib/server/commandSkills.json";
 import { buildReportArtifacts, ReportArtifacts } from "@/lib/server/reportArtifacts";
 import { readFile } from "node:fs/promises";
@@ -407,7 +408,11 @@ function buildReportQueryTitle(commandId: string | undefined, effectiveArg: stri
     lines.find((line) => line.toLowerCase().startsWith("geography:"))?.split(":").slice(1).join(":").trim() ||
     "Global";
 
-  return `Deep Research Brief: ${market} | ${niche} | ${geography}`;
+  // Create an exciting, eye-catching headline
+  const excitingWords = ["🚀 Unleashing", "🔥 Igniting", "⚡ Revolutionizing", "💥 Dominating", "🌟 Transforming"];
+  const randomWord = excitingWords[Math.floor(Math.random() * excitingWords.length)];
+  
+  return `${randomWord} ${market}: ${niche} in ${geography}`;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1088,15 +1093,20 @@ async function fetchPerplexityResearch(
     }),
   });
 
+  const bodyText = await response.text();
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Perplexity error ${response.status}: ${body}`);
+    throw new Error(`Perplexity error ${response.status}: ${bodyText}`);
   }
 
-  const payload = (await response.json()) as {
-    citations?: string[];
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  let payload: any;
+  try {
+    payload = JSON.parse(bodyText) as {
+      citations?: string[];
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+  } catch (err) {
+    throw new Error(`Perplexity returned non-JSON response: ${bodyText.slice(0,1000)}`);
+  }
 
   const rawContent = payload.choices?.[0]?.message?.content?.trim() || "";
 
@@ -1813,6 +1823,12 @@ export async function runResearchPipeline({
       artifacts,
     };
   }
+
+  if (command?.id === "fullmarketing") {
+    const fullResult = await runFullMarketingAgent(effectiveArg);
+    return fullResult as unknown as RunResearchResult;
+  }
+
   const commandContext = command
     ? [
         `Command ID: ${command.id}`,

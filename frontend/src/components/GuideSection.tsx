@@ -169,7 +169,7 @@ export default function GuideSection() {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : "Guide download failed.");
     } finally {

@@ -10,7 +10,15 @@ interface ResearchRequestBody {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as ResearchRequestBody;
+    let body: ResearchRequestBody;
+    try {
+      body = (await request.json()) as ResearchRequestBody;
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON payload." },
+        { status: 400 }
+      );
+    }
 
     const query = body.query?.trim() || "";
     if (!query) {
@@ -42,6 +50,8 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : "Research pipeline failed.";
 
+    // eslint-disable-next-line no-console
+    console.error(error);
     return NextResponse.json(
       { error: message },
       { status: 500 }

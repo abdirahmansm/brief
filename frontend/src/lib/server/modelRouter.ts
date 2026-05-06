@@ -92,14 +92,17 @@ async function callPerplexity(
     }),
   });
 
+  const bodyText = await response.text();
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Perplexity error ${response.status}: ${body}`);
+    throw new Error(`Perplexity error ${response.status}: ${bodyText}`);
   }
 
-  const json = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  let json: any;
+  try {
+    json = JSON.parse(bodyText) as { choices?: Array<{ message?: { content?: string } }> };
+  } catch (err) {
+    throw new Error(`Perplexity returned non-JSON response: ${bodyText.slice(0,1000)}`);
+  }
 
   const content = json.choices?.[0]?.message?.content?.trim();
   if (!content) {
@@ -140,9 +143,13 @@ async function callOpenRouter(
     throw new Error(`OpenRouter error ${response.status}: ${body}`);
   }
 
-  const json = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  const bodyText = await response.text();
+  let json: any;
+  try {
+    json = JSON.parse(bodyText) as { choices?: Array<{ message?: { content?: string } }> };
+  } catch (err) {
+    throw new Error(`OpenRouter returned non-JSON response: ${bodyText.slice(0,1000)}`);
+  }
 
   const content = json.choices?.[0]?.message?.content?.trim();
   if (!content) {
@@ -181,9 +188,13 @@ async function callGroq(
     throw new Error(`Groq error ${response.status}: ${body}`);
   }
 
-  const json = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  const bodyText = await response.text();
+  let json: any;
+  try {
+    json = JSON.parse(bodyText) as { choices?: Array<{ message?: { content?: string } }> };
+  } catch (err) {
+    throw new Error(`Groq returned non-JSON response: ${bodyText.slice(0,1000)}`);
+  }
 
   const content = json.choices?.[0]?.message?.content?.trim();
   if (!content) {

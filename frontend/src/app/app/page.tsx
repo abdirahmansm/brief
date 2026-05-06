@@ -2,17 +2,16 @@
 
 import Sidebar from "@/components/Sidebar";
 import PromptInput from "@/components/PromptInput";
+import FullMarketingInput from "@/components/FullMarketingInput";
 import ResearchProgress from "@/components/ResearchProgress";
-import ReportView from "@/components/ReportView";
 import AuthPage from "@/components/AuthPage";
 import LogoMark from "@/components/LogoMark";
 import { useResearch } from "@/hooks/useResearch";
 import { useAuth } from "@/components/AuthProvider";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MARKETING_COMMANDS, type MarketingCommand } from "@/lib/marketingSkills";
 import { formatMarketingTarget } from "@/lib/marketingDisplay";
 
-const TRUSTED_LOGOS = ["Wiley", "Taylor & Francis", "Sage", "ACS Publications"];
 const MAIL_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SIGNAL_PRIORITIES =
   "All major demand, competitor, product, and regulatory signals with market-moving impact.";
@@ -107,7 +106,8 @@ function buildStorageKey(uid: string, suffix: string): string {
   return `brief.mail.${uid}.${suffix}`;
 }
 
-function buildMailResearchInput(profile: MailProfile): string {
+function buildMailResearchInput(profile: MailProfile, topicFocus?: string): string {
+  const normalizedTopic = topicFocus?.trim();
   return [
     `Profile ID: ${profile.id}`,
     `Market: ${profile.market}`,
@@ -118,9 +118,12 @@ function buildMailResearchInput(profile: MailProfile): string {
     `Signal priorities: ${profile.signalPriorities}`,
     `Decision goals: ${profile.decisionGoals}`,
     `Noise filters: ${profile.noiseFilters}`,
+    normalizedTopic ? `Topic focus: ${normalizedTopic}` : null,
     "Create a fact-checked deep market briefing with verified, probable, and uncertain classification.",
     "Return strategic implications and concrete actions for this week, 30 days, and quarter.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export default function Dashboard() {
@@ -147,11 +150,19 @@ export default function Dashboard() {
   const [mailLastViewedAt, setMailLastViewedAt] = useState(0);
   const [mailPresetQuery, setMailPresetQuery] = useState("");
   const [selectedMailSessionId, setSelectedMailSessionId] = useState<string | null>(null);
+  const [mailTopicInput, setMailTopicInput] = useState("");
+  const [mailLastTopic, setMailLastTopic] = useState<string | null>(null);
   const [mailExporting, setMailExporting] = useState<"md" | "html" | "pdf" | null>(null);
   const [mailExportError, setMailExportError] = useState("");
+  const [reportExporting, setReportExporting] = useState<"md" | "html" | "pdf" | null>(null);
+  const [reportExportError, setReportExportError] = useState("");
 
   const deepResearchCommand = useMemo(
     () => MARKETING_COMMANDS.find((cmd) => cmd.id === "deepresearch") || null,
+    []
+  );
+  const fullMarketingCommand = useMemo(
+    () => MARKETING_COMMANDS.find((cmd) => cmd.id === "fullmarketing") || null,
     []
   );
 
@@ -161,16 +172,35 @@ export default function Dashboard() {
     startMarketingCommand(cmd, arg);
   };
 
+  const handleFullMarketingGenerate = useCallback(
+    (websiteUrl: string) => {
+      if (!fullMarketingCommand) return;
+      void startMarketingCommand(fullMarketingCommand, websiteUrl, { forceNewSession: true });
+    },
+    [fullMarketingCommand, startMarketingCommand]
+  );
+
   const runMailResearch = useMemo(() => {
-    return () => {
-      if (!mailProfile || !deepResearchCommand || mailRunning) return;
+    return (topicFocus?: string) => {
+      if (!deepResearchCommand || mailRunning) return;
       const now = Date.now();
+      const normalizedTopic = topicFocus?.trim() || "";
+      if (!mailProfile && !normalizedTopic) return;
+
       setMailRunning(true);
       setMailLastRunAt(now);
       setMailNextRunAt(now + MAIL_INTERVAL_MS);
+      if (normalizedTopic) {
+        setMailLastTopic(normalizedTopic);
+      }
+
+      const query = mailProfile
+        ? buildMailResearchInput(mailProfile, normalizedTopic)
+        : normalizedTopic;
+
       void startMarketingCommand(
         deepResearchCommand,
-        buildMailResearchInput(mailProfile),
+        query,
         { forceNewSession: true }
       );
     };
@@ -182,6 +212,7 @@ export default function Dashboard() {
     const rawLastRun = window.localStorage.getItem(buildStorageKey(userId, "lastRunAt"));
     const rawNextRun = window.localStorage.getItem(buildStorageKey(userId, "nextRunAt"));
     const rawViewed = window.localStorage.getItem(buildStorageKey(userId, "lastViewedAt"));
+    const rawLastTopic = window.localStorage.getItem(buildStorageKey(userId, "lastTopic"));
 
     if (rawProfile) {
       try {
@@ -196,6 +227,8 @@ export default function Dashboard() {
     setMailLastRunAt(rawLastRun ? Number(rawLastRun) : null);
     setMailNextRunAt(rawNextRun ? Number(rawNextRun) : null);
     setMailLastViewedAt(rawViewed ? Number(rawViewed) : 0);
+    setMailLastTopic(rawLastTopic ? String(rawLastTopic) : null);
+    setMailTopicInput(rawLastTopic ? String(rawLastTopic) : "");
   }, [userId]);
 
   useEffect(() => {
@@ -216,7 +249,12 @@ export default function Dashboard() {
       window.localStorage.setItem(buildStorageKey(userId, "nextRunAt"), String(mailNextRunAt));
     }
     window.localStorage.setItem(buildStorageKey(userId, "lastViewedAt"), String(mailLastViewedAt));
-  }, [mailLastRunAt, mailNextRunAt, mailLastViewedAt, userId]);
+    if (mailLastTopic) {
+      window.localStorage.setItem(buildStorageKey(userId, "lastTopic"), mailLastTopic);
+    } else {
+      window.localStorage.removeItem(buildStorageKey(userId, "lastTopic"));
+    }
+  }, [mailLastRunAt, mailNextRunAt, mailLastTopic, mailLastViewedAt, userId]);
 
   const mailSessions = useMemo(() => {
     if (!mailProfile) return [];
@@ -403,11 +441,59 @@ export default function Dashboard() {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
       setMailExportError(error instanceof Error ? error.message : "Export failed.");
     } finally {
       setMailExporting(null);
+    }
+  };
+
+  const downloadActiveReport = async (format: "md" | "html" | "pdf") => {
+    if (!visibleActiveSession?.report) return;
+    setReportExportError("");
+    setReportExporting(format);
+
+    try {
+      const response = await fetch("/api/research/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          report: {
+            ...visibleActiveSession.report,
+            createdAt: visibleActiveSession.report.createdAt.toISOString(),
+          },
+          scores: visibleActiveSession.marketing?.scores,
+          overallScore: visibleActiveSession.marketing?.overallScore,
+          grade: visibleActiveSession.marketing?.grade,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error || "Export failed.");
+      }
+
+      const blob = await response.blob();
+      const fileNameBase = (visibleActiveSession.report.query || "brief-report")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "brief-report";
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileNameBase}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setReportExportError(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setReportExporting(null);
     }
   };
 
@@ -482,16 +568,16 @@ export default function Dashboard() {
               className="rounded-lg p-2 text-[var(--muted-foreground)] hover:bg-[rgba(139,92,246,0.08)] hover:text-[var(--foreground)]"
               aria-label="Toggle sidebar"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12h18M3 6h18M3 18h18" />
               </svg>
             </button>
             <span className="text-sm text-[var(--muted-foreground)]">Research Workspace</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
             <button
               onClick={openMailCenter}
-              className="relative rounded-full border border-[rgba(139,92,246,0.2)] bg-[rgba(139,92,246,0.08)] p-2 text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.14)]"
+              className="relative rounded-full p-2 text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.08)]"
               aria-label="Open Mail notifications"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -504,12 +590,12 @@ export default function Dashboard() {
                 </span>
               ) : null}
             </button>
-            <button
-              onClick={() => setMailOpen(true)}
-              className="rounded-full border border-[rgba(139,92,246,0.2)] bg-[rgba(139,92,246,0.08)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.14)]"
-            >
-              Mail
-            </button>
+            <div className="flex items-center gap-2 rounded-full px-1 text-[var(--foreground)]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(139,92,246,0.14)] text-sm font-semibold text-[var(--foreground)]">{(user?.displayName?.[0] || user?.email?.[0] || "A").toUpperCase()}</span>
+              <svg className="h-4 w-4 text-[var(--muted-foreground)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </div>
           </div>
         </div>
 
@@ -777,7 +863,24 @@ export default function Dashboard() {
                           {unreadMailCount} full report{unreadMailCount === 1 ? "" : "s"} ready to download
                         </p>
                       ) : null}
-                      <button onClick={runMailResearch} disabled={mailRunning} className="mt-4 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.12)] px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.2)] disabled:opacity-50">{mailRunning ? "Running..." : "Run now"}</button>
+                      <button onClick={() => runMailResearch(mailTopicInput)} disabled={mailRunning} className="mt-4 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.12)] px-3 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.2)] disabled:opacity-50">{mailRunning ? "Running..." : "Run now"}</button>
+                    </div>
+                  </div>
+
+                  <div className="glass-panel rounded-2xl p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Setup new mail</p>
+                    <p className="mt-2 text-xs text-[var(--muted-foreground)]">Start a fresh mail workflow using the built mail setup interface. This will take you into the full mail UI for generating and managing briefs.</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMailProfile(null);
+                          setMailForm(EMPTY_MAIL_FORM);
+                        }}
+                        className="rounded-xl bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-3 py-2 text-xs font-semibold text-white shadow-[0_12px_28px_rgba(139,92,246,0.26)]"
+                      >
+                        Open mail setup
+                      </button>
                     </div>
                   </div>
 
@@ -875,23 +978,35 @@ export default function Dashboard() {
           {isIdle && (
             <>
               <section className="flex flex-1 flex-col items-center justify-center text-center">
-                <div className="mb-6 flex items-center gap-4">
-                  <LogoMark />
-                  <span className="text-4xl font-semibold tracking-tight text-white">Brief</span>
+                <div className="mb-5 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <LogoMark />
+                    <span className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Brief</span>
+                  </div>
+                  <span className="text-sm text-[var(--accent)] sm:text-base">Market Research</span>
                 </div>
-                <h1 className="mb-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">What should we decode today?</h1>
-                <p className="mb-8 max-w-2xl text-sm text-[var(--muted-foreground)] sm:text-base">Start with one prompt. Brief will scan live sources, surface patterns, and deliver a source-backed strategy report.</p>
-                <div className="glass-panel-strong w-full rounded-3xl p-4 sm:p-6">
-                  <PromptInput onSubmit={startResearch} onMarketingCommand={handleMarketingCommand} canContinueInSkill={false} lastCommandLabel={undefined} />
+                <h1 className="mb-3 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">What website should we research today?</h1>
+                <p className="mb-8 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-base">Generate in-depth, source-backed market research reports with Brief.</p>
+                <div className="w-full max-w-4xl">
+                  <FullMarketingInput onGenerate={handleFullMarketingGenerate} />
                 </div>
-              </section>
-              <section className="mt-12 border-t border-[rgba(139,92,246,0.12)] pt-10 text-center">
-                <p className="mb-6 text-sm font-medium text-[var(--muted-foreground)]">Used by operators shipping in competitive markets</p>
-                <div className="flex flex-wrap items-center justify-center gap-3 text-sm font-semibold text-[var(--foreground)] sm:gap-4 sm:text-base">
-                  {TRUSTED_LOGOS.map((logo) => (
-                    <span key={logo} className="glass-panel rounded-full px-4 py-1.5 opacity-95">{logo}</span>
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm">
+                  {[
+                    "Company Analysis",
+                    "Industry Overview",
+                    "Competitor Research",
+                    "Market Landscape",
+                    "Trend Analysis",
+                  ].map((label) => (
+                    <button key={label} className="rounded-full border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.48)] px-4 py-2 text-[13px] text-[var(--foreground)] hover:bg-[rgba(139,92,246,0.1)]">
+                      {label}
+                    </button>
                   ))}
                 </div>
+                <p className="mt-8 flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[rgba(139,92,246,0.2)] text-[10px]">🔒</span>
+                  Private. Secure. Source-backed.
+                </p>
               </section>
             </>
           )}
@@ -920,13 +1035,51 @@ export default function Dashboard() {
 
           {isDone && visibleActiveSession?.report && (
             <section className="mx-auto w-full max-w-4xl py-4">
-              <div className="glass-panel-strong rounded-2xl p-6">
-                <ReportView report={visibleActiveSession.report} marketing={visibleActiveSession.marketing} />
-              </div>
-              <div className="mt-8">
-                <p className="mb-3 text-center text-sm text-[var(--muted-foreground)]">Need to refine this output?</p>
-                <div className="glass-panel-strong rounded-2xl p-4 sm:p-5">
-                  <PromptInput onSubmit={startResearch} onMarketingCommand={handleMarketingCommand} canContinueInSkill={Boolean(visibleActiveSession?.marketing)} lastCommandLabel={visibleActiveSession?.marketing?.commandLabel} />
+              <div className="glass-panel-strong rounded-3xl p-6 sm:p-8">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(139,92,246,0.16)] text-[var(--accent)]">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Research complete</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">Your report is ready. Download it below without generating extra chat output.</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[rgba(139,92,246,0.14)] bg-[rgba(20,20,40,0.52)] p-4 sm:p-5">
+                  <p className="text-lg font-semibold text-white">{visibleActiveSession.marketing ? formatMarketingTarget(visibleActiveSession.marketing) : visibleActiveSession.report.query}</p>
+                  <p className="mt-2 text-sm text-[var(--muted-foreground)]">Steps taken are complete. The compiled report is available in your preferred format below.</p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => downloadActiveReport("md")}
+                      disabled={Boolean(reportExporting)}
+                      className="rounded-lg border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-4 py-2 text-xs font-medium text-[var(--foreground)] hover:border-[rgba(139,92,246,0.5)] disabled:opacity-50"
+                    >
+                      {reportExporting === "md" ? "Exporting..." : "Download .md"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadActiveReport("html")}
+                      disabled={Boolean(reportExporting)}
+                      className="rounded-lg border border-[rgba(139,92,246,0.2)] bg-[rgba(20,20,40,0.55)] px-4 py-2 text-xs font-medium text-[var(--foreground)] hover:border-[rgba(139,92,246,0.5)] disabled:opacity-50"
+                    >
+                      {reportExporting === "html" ? "Exporting..." : "Download .html"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadActiveReport("pdf")}
+                      disabled={Boolean(reportExporting)}
+                      className="rounded-lg bg-[linear-gradient(135deg,oklch(0.55_0.24_262),oklch(0.50_0.22_262))] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {reportExporting === "pdf" ? "Exporting..." : "Download .pdf"}
+                    </button>
+                  </div>
+
+                  {reportExportError ? <p className="mt-2 text-xs text-rose-300">{reportExportError}</p> : null}
                 </div>
               </div>
             </section>

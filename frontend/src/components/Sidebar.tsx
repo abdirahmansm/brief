@@ -56,7 +56,7 @@ export default function Sidebar({
           >
             <path d="M12 5v14M5 12h14" />
           </svg>
-          New Thread
+          New Research
         </button>
       </div>
 
@@ -138,6 +138,11 @@ export default function Sidebar({
                 {user.displayName || user.email}
               </p>
             </div>
+            <span className="text-[var(--muted-foreground)]">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
             <button
               onClick={onSignOut}
               className="cursor-pointer rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[rgba(139,92,246,0.08)]"

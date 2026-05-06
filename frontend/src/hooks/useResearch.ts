@@ -71,6 +71,173 @@ interface ResearchApiResponse {
   error?: string;
 }
 
+function firstSentence(text: string): string {
+  return (
+    text
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)[0] || ""
+  );
+}
+
+function secondSentence(text: string): string {
+  return (
+    text
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)[1] || ""
+  );
+}
+
+function computeImpactLevel(
+  title: string,
+  scores: AuditScore[] | undefined,
+  overallScore: number | undefined
+): "High" | "Medium" | "Low" {
+  const sectionScore = scores?.find((item) => item.category.toLowerCase() === title.toLowerCase())?.score;
+  const value = sectionScore ?? overallScore;
+  if (typeof value !== "number") return "Medium";
+  if (value >= 80) return "High";
+  if (value >= 60) return "Medium";
+  return "Low";
+}
+
+function harmonizeReportForDisplay(data: ResearchApiResponse): ResearchApiResponse {
+  if (!data.report) return data;
+  if (!data.report.sections?.length) return data;
+
+  const conversational = data.report.sections.some((section) => {
+    const title = section.title.toLowerCase();
+    return title === "brief assistant" || title.startsWith("__chat_");
+  });
+
+  if (conversational) {
+    return data;
+  }
+
+  const strengths = [...(data.scores || [])]
+    .filter((item) => item.score >= 75)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const constraints = [...(data.scores || [])]
+    .filter((item) => item.score < 65)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 3);
+
+  const sectionBlocks = data.report.sections.map((section) => {
+    const core = firstSentence(section.content) || "No concise insight extracted.";
+    const why = secondSentence(section.content) || "This area materially affects strategic clarity and operating outcomes.";
+    const impact = computeImpactLevel(section.title, data.scores, data.overallScore);
+    const implication =
+      impact === "High"
+        ? "Execute corrective actions immediately and track outcomes weekly."
+        : impact === "Medium"
+          ? "Prioritize in the next planning cycle with defined owner and milestone."
+          : "Treat as optimization work once critical and medium-impact initiatives are underway.";
+
+    return {
+      title: section.title,
+      content: [
+        `Core Insight: ${core}`,
+        `Why It Matters: ${why}`,
+        `Strategic Implication: ${implication}`,
+        `Impact Level: ${impact}`,
+      ].join("\n\n"),
+      impact,
+    };
+  });
+
+  const prioritized = sectionBlocks.map((item) => ({ title: item.title, impact: item.impact }));
+
+  const structuredSections: Array<{ title: string; content: string }> = [];
+
+  structuredSections.push({
+    title: "Strategic Overview",
+    content: `Thesis: ${firstSentence(data.report.overview) || "No strategic thesis available."}`,
+  });
+
+  const snapshotLines: string[] = [];
+  if (strengths.length) {
+    snapshotLines.push("Where performance is strongest:");
+    strengths.forEach((item) => snapshotLines.push(`- ${item.category}: ${item.score}/100, indicating reliable execution leverage.`));
+    snapshotLines.push("");
+  }
+  if (constraints.length) {
+    snapshotLines.push("Where performance is leaking value:");
+    constraints.forEach((item) => snapshotLines.push(`- ${item.category}: ${item.score}/100, likely constraining conversion or growth velocity.`));
+  }
+  if (!snapshotLines.length && typeof data.overallScore === "number") {
+    snapshotLines.push(`Current aggregate signal is ${data.overallScore}/100${data.grade ? ` (Grade ${data.grade})` : ""}.`);
+  }
+  if (!snapshotLines.length) {
+    snapshotLines.push("No quantitative score data is available for this run.");
+  }
+  structuredSections.push({ title: "Performance Snapshot", content: snapshotLines.join("\n") });
+
+  sectionBlocks.forEach((item) => {
+    structuredSections.push({
+      title: `Insight Block: ${item.title}`,
+      content: item.content,
+    });
+  });
+
+  const prioritizedLines: string[] = [];
+  (["High", "Medium", "Low"] as const).forEach((level) => {
+    const items = prioritized.filter((item) => item.impact === level);
+    if (!items.length) return;
+    prioritizedLines.push(`${level} impact priorities:`);
+    items.forEach((item) => prioritizedLines.push(`- ${item.title}`));
+    prioritizedLines.push("");
+  });
+  structuredSections.push({
+    title: "Prioritized Insights",
+    content: prioritizedLines.join("\n").trim() || "No prioritized insights available.",
+  });
+
+  const synthesisLines = [
+    `- ${firstSentence(data.report.overview) || "No synthesis available."}`,
+    `- ${secondSentence(data.report.overview) || "Primary upside is tied to prioritizing the highest-impact constraints first."}`,
+  ];
+  if (constraints.length) {
+    synthesisLines.push(`- Immediate focus should center on ${constraints.map((item) => item.category).join(", ")}.`);
+  }
+  structuredSections.push({ title: "Strategic Synthesis", content: synthesisLines.join("\n") });
+
+  const immediate = prioritized.filter((item) => item.impact === "High").slice(0, 3);
+  const mid = prioritized.filter((item) => item.impact === "Medium").slice(0, 4);
+  const long = prioritized.filter((item) => item.impact === "Low").slice(0, 4);
+
+  const actionLines: string[] = ["Immediate (0-2 weeks):"];
+  if (immediate.length) {
+    immediate.forEach((item) => actionLines.push(`- ${item.title}: define owner, execute first intervention, and baseline KPI movement.`));
+  } else {
+    actionLines.push("- Confirm top constraints, assign accountable owner, and define measurable weekly KPI targets.");
+  }
+  actionLines.push("", "Mid term (1-3 months):");
+  if (mid.length) {
+    mid.forEach((item) => actionLines.push(`- ${item.title}: run targeted experiments and process changes to improve conversion quality.`));
+  } else {
+    actionLines.push("- Consolidate immediate learnings into repeatable operating playbooks.");
+  }
+  actionLines.push("", "Long term (3-12 months):");
+  if (long.length) {
+    long.forEach((item) => actionLines.push(`- ${item.title}: embed into roadmap to strengthen long-term differentiation and resilience.`));
+  } else {
+    actionLines.push("- Revisit strategic roadmap and scale initiatives that show consistent signal.");
+  }
+  structuredSections.push({ title: "Action Plan", content: actionLines.join("\n") });
+
+  return {
+    ...data,
+    report: {
+      ...data.report,
+      sections: structuredSections,
+    },
+  };
+}
+
 interface SerializedResearchSession {
   id: string;
   query: string;
@@ -211,17 +378,33 @@ async function runResearchRequest(payload: {
   commandArg?: string;
   responseDepth?: "simple" | "deep";
 }): Promise<ResearchApiResponse> {
-  const response = await fetch("/api/research", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/research", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "fetch failed";
+    throw new Error(
+      `Could not reach research service (${message}). Check internet connection, the target URL, and try again.`
+    );
+  }
 
-  const data = (await response.json()) as ResearchApiResponse;
+  const text = await response.text();
+  let data: ResearchApiResponse;
+  try {
+    data = JSON.parse(text) as ResearchApiResponse;
+  } catch {
+    throw new Error("Research service returned an invalid response payload. Please retry.");
+  }
+
   if (!response.ok) {
     throw new Error(data.error || "Research request failed.");
   }
-  return data;
+
+  return harmonizeReportForDisplay(data);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -283,7 +466,6 @@ function mergeSources(
 
   return merged;
 }
-
 async function typeByLine(
   input: string,
   onTick: (value: string) => void,
@@ -971,7 +1153,7 @@ export function useResearch(user: User | null) {
         }, true);
       }
     },
-    [activeId, uid, appendLog, progressToStep, streamReportOutput, updateSession]
+    [activeId, uid, user, appendLog, progressToStep, streamReportOutput, updateSession]
   );
 
   return {

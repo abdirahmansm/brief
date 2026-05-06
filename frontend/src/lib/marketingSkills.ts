@@ -26,6 +26,18 @@ export const MARKETING_COMMANDS: MarketingCommand[] = [
     phases: ["Fetching website content", "Analyzing content & messaging", "Evaluating conversion optimization", "Auditing SEO & discoverability", "Assessing competitive positioning", "Reviewing brand & trust signals", "Scoring growth & strategy", "Compiling final report"],
   },
   {
+    id: "fullmarketing",
+    command: "/market full",
+    label: "Full Marketing Intelligence",
+    description: "Unified premium website analysis that combines audit, market, copy, funnel, SEO, competitors, segmentation, demand, risk, and strategy into one report.",
+    inputType: "url",
+    placeholder: "https://example.com",
+    category: "analysis",
+    icon: "🧠",
+    outputFile: "FULL-MARKETING-INTELLIGENCE.md",
+    phases: ["Fetching website", "Running market intelligence", "Analyzing growth surfaces", "Composing premium report", "Finalizing scorecard"],
+  },
+  {
     id: "quick",
     command: "/market quick",
     label: "Quick Snapshot",

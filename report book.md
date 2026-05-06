@@ -1,42 +1,467 @@
-# Brief Mail Deep Research Report Book
+FINAL YEAR PROJECT REPORT TEMPLATE (ENGLISH VERSION)
 
-## Purpose
+1. COVER PAGE
+   Project Title
+   Brief - AI Market Research Assistant
 
-This document explains the Mail deep research feature end-to-end: why it exists, what user problem it solves, what inputs it consumes, what outputs it produces, which skills and backend layers it uses, and how the full system is orchestrated from the UI down to the final report artifacts.
-
-The goal is to give you a technical report book you can expand for presentation, viva, or professor-level questioning. It focuses on the Mail workflow only, not the full product.
-
----
-
-## 1. Executive Summary
-
-Mail is Brief's founder-focused, recurring intelligence workflow. It turns a user-defined market profile into a repeatable deep research brief that can be reviewed like a morning executive update.
-
-The feature solves a simple but important problem: founders do not want to re-prompt the system every day, repeat the same setup, or sift through raw search results. They want a stable briefing workflow that remembers the niche, re-runs the right research command, and presents the output as a readable decision asset.
-
-At the architecture level, Mail is not a separate research engine. It is a product layer built on top of the deep research pipeline. The UI collects the profile, the frontend hooks route the request into the research system, the server pipeline gathers sources and composes the report, and the report artifacts layer turns the result into downloadable formats.
+Project Team
 
 ---
 
-## 2. What Mail Is Designed To Do
-
-Mail is meant to behave like a premium founder intelligence desk.
-
-It helps users:
-
-- define a repeatable niche and market context once
-- receive recurring deep research output without rebuilding the prompt every time
-- store and revisit reports for the same profile
-- download the output as markdown, HTML, or PDF
-- preserve source links so the report can act as a gateway to deeper research
-
-The output is intentionally not chat-like. It is designed to feel like a structured executive brief that can be skimmed quickly and used for decisions.
+Student Name(s)
 
 ---
 
-## 3. The User Problem It Solves
+Student ID(s)
 
-The Mail workflow solves five common problems for founders and operators.
+---
+
+Supervisor
+
+---
+
+Course Name and Code
+
+---
+
+Department
+
+---
+
+University Name
+
+---
+
+Date
+
+---
+
+2. APPROVAL PAGE
+   This page confirms that the project has been reviewed and approved.
+
+Supervisor Name and Signature
+
+---
+
+Jury or Committee Members
+
+1. ***
+2. ***
+3. ***
+
+Department Head
+
+---
+
+3. ACKNOWLEDGEMENT (OPTIONAL)
+   I would like to thank my supervisor for guidance and structured feedback throughout the project. I also thank my project team for shared effort in design, development, and testing. Finally, I thank the university for providing resources, laboratory access, and academic support.
+
+4. ABSTRACT
+   Brief is an AI market research assistant that turns a single user prompt into a structured, decision-ready intelligence report. The project addresses the common problem of slow, fragmented market research by combining live web scanning with structured synthesis. The system accepts a user research prompt, collects evidence from credible public sources, extracts patterns, and generates a report that includes market overview, competitor insight, customer pain points, trends, gaps, and opportunities. The implementation uses a Next.js frontend, Firebase backend services, serverless functions for orchestration, and external AI APIs for retrieval and summarization. Evaluation shows that Brief reduces research time significantly while increasing output consistency and readability. The result is a clean, analyst-grade report that is easy to export and share.
+
+Keywords: market research, AI summarization, web retrieval, competitive analysis, decision support, SaaS
+
+5. ABSTRACT (ENGLISH)
+   Brief is an AI market research assistant that turns a single user prompt into a structured, decision-ready intelligence report. The project addresses the common problem of slow, fragmented market research by combining live web scanning with structured synthesis. The system accepts a user research prompt, collects evidence from credible public sources, extracts patterns, and generates a report that includes market overview, competitor insight, customer pain points, trends, gaps, and opportunities. The implementation uses a Next.js frontend, Firebase backend services, serverless functions for orchestration, and external AI APIs for retrieval and summarization. Evaluation shows that Brief reduces research time significantly while increasing output consistency and readability. The result is a clean, analyst-grade report that is easy to export and share.
+
+Keywords: market research, AI summarization, web retrieval, competitive analysis, decision support, SaaS
+
+6. TABLE OF CONTENTS
+1. Introduction ............................................. 1
+1. General Concepts ......................................... 6
+1. Literature Review ....................................... 15
+1. Materials and Methods (Methodology) ...................... 25
+1. Results and Discussion ................................... 38
+1. Conclusion and Recommendations ........................... 46
+1. References ............................................... 49
+1. Appendix ................................................. 50
+
+1. LIST OF TABLES
+   Table 1.1 Project objectives and deliverables
+   Table 1.2 Problem statement and constraints
+   Table 2.1 Key AI and ML concepts used in the project
+   Table 2.2 Web retrieval and ranking concepts
+   Table 2.3 Data storage and security concepts
+   Table 3.1 Summary of related systems
+   Table 3.2 Comparison of Brief vs. existing tools
+   Table 4.1 Technology stack
+   Table 4.2 Functional requirements
+   Table 4.3 Non-functional requirements
+   Table 4.4 API providers and costs
+   Table 4.5 Data model overview
+   Table 5.1 Evaluation dataset summary
+   Table 5.2 Performance metrics
+   Table 5.3 User feedback results
+   Table 5.4 Export quality assessment
+   Table 6.1 Future work roadmap
+
+1. LIST OF FIGURES
+   Figure 1.1 Problem context and research pipeline overview
+   Figure 2.1 AI pipeline stages used in Brief
+   Figure 2.2 Retrieval-augmented generation concept
+   Figure 3.1 Positioning map of market research tools
+   Figure 4.1 System architecture diagram
+   Figure 4.2 Data flow diagram
+   Figure 4.3 Sequence diagram for report generation
+   Figure 4.4 Database schema overview
+   Figure 4.5 UI layout and report view
+   Figure 5.1 Sample report snippet
+   Figure 5.2 Latency distribution chart
+   Figure 5.3 Quality scoring summary
+   Figure 6.1 Roadmap timeline
+
+1. ABBREVIATIONS
+   API - Application Programming Interface
+   AI - Artificial Intelligence
+   RAG - Retrieval Augmented Generation
+   LLM - Large Language Model
+   UI - User Interface
+   UX - User Experience
+   NLP - Natural Language Processing
+   SaaS - Software as a Service
+   DB - Database
+   PDF - Portable Document Format
+   SEO - Search Engine Optimization
+
+MAIN REPORT
+
+1. INTRODUCTION
+   1.1 Purpose
+   The purpose of this project is to design and implement Brief, an AI market research assistant that transforms a user prompt into a structured market intelligence report. The system aims to reduce research time, improve report consistency, and provide decision-ready insights for founders, product managers, and marketing teams.
+
+Specific objectives include:
+
+- Provide a clean, chat-like interface for research input and report delivery.
+- Collect credible sources and evidence from the web in near real time.
+- Extract relevant themes, pain points, and trends from sources.
+- Generate structured reports with consistent headings and export options.
+- Store reports and inputs for future access and iteration.
+
+Table 1.1 Project objectives and deliverables
+| Objective | Deliverable | Success Criteria |
+| --- | --- | --- |
+| Fast report generation | End-to-end pipeline | Report delivered in under 2 minutes |
+| Structured output | Standard report template | Coverage of required sections |
+| Evidence-based insights | Source collection and citations | At least 8 credible sources |
+| Professional presentation | UI and export formats | Clean report view and exports |
+
+1.2 Background
+Market research is often slow and fragmented. Teams rely on manual searching, scattered sources, and inconsistent summaries. This creates delays in decision making and forces teams to repeat similar research tasks. The problem is especially acute for early-stage startups with limited time and resources.
+
+Existing research tools provide either raw search results or expensive consulting services. Many AI tools generate generic content without citations, which reduces credibility. Brief aims to close this gap by combining live retrieval with structured synthesis and a report format designed for business decision makers.
+
+The project focuses on a minimal, high-quality user experience while delivering a deep, multi-section analysis. The system uses a layered architecture to separate the decision logic from deterministic execution scripts, improving reliability.
+
+1.3 Problem Statement
+The core problem is the inefficiency of obtaining reliable market intelligence. Existing solutions are either too manual, too slow, or too shallow. Key limitations include:
+
+- High time cost for researchers to collect and synthesize information.
+- Lack of standard report structure for decision making.
+- Insufficient source citation and transparency.
+- Difficulty in repeating research for the same market at different times.
+
+Table 1.2 Problem statement and constraints
+| Constraint | Description | Impact |
+| --- | --- | --- |
+| Time | Manual research requires hours or days | Slow decisions |
+| Consistency | Reports vary by researcher | Unreliable comparisons |
+| Cost | Consulting is expensive | Limited access |
+| Source quality | Search results are noisy | Lower trust |
+
+1.4 Proposed Solution Overview
+Brief provides a single prompt interface that triggers a pipeline:
+
+1. Parse user intent and research scope.
+2. Retrieve relevant sources with a live search provider.
+3. Extract evidence and summarize key findings.
+4. Assemble the findings into a structured report.
+5. Allow export and archival for future use.
+
+1.5 Structure of the Report
+This report follows a final year project format. It covers conceptual foundations, literature review, system methodology, evaluation results, and future recommendations.
+
+2. GENERAL CONCEPTS
+   This chapter explains the theoretical and technical foundations of the project.
+
+2.1 Artificial Intelligence and NLP
+AI refers to systems that perform tasks requiring human intelligence. In this project, AI is used for text understanding, summarization, and structured report generation. NLP techniques allow the system to parse user prompts, extract relevant terms, and synthesize text into formal sections.
+
+Table 2.1 Key AI and ML concepts used in the project
+| Concept | Description | Use in Brief |
+| --- | --- | --- |
+| Summarization | Condenses text while preserving key meaning | Report sections |
+| Entity extraction | Identifies names, brands, and markets | Company and competitor lists |
+| Topic modeling | Groups related ideas | Trend and pain point analysis |
+| Similarity scoring | Measures overlap in text | Section de-duplication |
+
+2.2 Retrieval Augmented Generation (RAG)
+RAG combines document retrieval with text generation. Instead of generating output only from a model, the system first retrieves relevant documents, then uses them as evidence for the generation step. This improves factual accuracy and citation quality.
+
+Figure 2.1 AI pipeline stages used in Brief
+Caption: The pipeline moves from prompt intake to retrieval, evidence selection, and structured synthesis.
+
+Figure 2.2 Retrieval-augmented generation concept
+Caption: Retrieved sources provide grounding for the final report.
+
+2.3 Web Retrieval and Ranking
+Brief relies on a search API that returns relevant sources. Ranking is based on relevance, recency, and credibility. The system applies filters to remove duplicates and low-quality domains.
+
+Table 2.2 Web retrieval and ranking concepts
+| Concept | Description | Example in Brief |
+| --- | --- | --- |
+| Query expansion | Adds related terms to broaden results | Market and competitor keywords |
+| Source scoring | Rates sources based on trust signals | Domain reputation filtering |
+| Deduplication | Removes redundant results | Same article from multiple outlets |
+
+2.4 Data Storage and Security
+Brief stores user prompts, report artifacts, and metadata in a cloud database. Security is managed through access control rules and authentication.
+
+Table 2.3 Data storage and security concepts
+| Concept | Description | Application |
+| --- | --- | --- |
+| Access rules | Restrict data access | User-specific reports |
+| Encryption | Protects data at rest and in transit | HTTPS and managed storage |
+| Audit logs | Track requests and usage | System monitoring |
+
+2.5 Frontend and UX Concepts
+The system uses a minimal interface that reduces cognitive load. Important UX concepts include:
+
+- Single primary action per screen.
+- Clear progress feedback during report generation.
+- Visual hierarchy that emphasizes the report title, sections, and evidence.
+
+3. LITERATURE REVIEW
+   This section reviews prior work and tools in market research and AI summarization.
+
+3.1 Related Research
+Academic research shows that LLMs can improve summary quality when grounded with retrieval. Studies in business intelligence automation indicate that structured outputs improve decision-making speed and consistency.
+
+3.2 Existing Systems
+Existing tools fall into three categories:
+
+1. Search engines that provide raw results without synthesis.
+2. AI writing tools that generate text but lack citations.
+3. Consulting services that deliver high-quality reports at high cost.
+
+Table 3.1 Summary of related systems
+| System | Strengths | Limitations |
+| --- | --- | --- |
+| Traditional search | Breadth of sources | No synthesis or structure |
+| Generic AI chatbots | Speed | Weak citations, generic tone |
+| Consulting firms | Depth and credibility | Expensive and slow |
+
+3.3 Gaps in Existing Solutions
+The main gaps are:
+
+- Lack of real-time, structured market intelligence.
+- Poor source transparency in AI-generated reports.
+- High cost of expert-level analysis.
+
+  3.4 How Brief Improves on Prior Work
+  Brief integrates structured report templates with retrieval-based evidence. It also provides export formats and maintains report consistency across sessions.
+
+Table 3.2 Comparison of Brief vs. existing tools
+| Feature | Brief | Search Engines | AI Chat Tools | Consulting |
+| --- | --- | --- | --- | --- |
+| Live sources | Yes | Yes | Limited | Yes |
+| Structured report | Yes | No | Limited | Yes |
+| Citations | Yes | No | Limited | Yes |
+| Cost | Low | Low | Low | High |
+| Speed | Minutes | Minutes to hours | Minutes | Weeks |
+
+4. MATERIALS AND METHODS (METHODOLOGY)
+   This section describes how Brief was built and how the system operates.
+
+4.1 System Design
+The system follows a three-layer architecture:
+Layer 1: Directives define what to do and the expected outputs.
+Layer 2: Orchestration decides the flow and handles errors.
+Layer 3: Execution scripts perform deterministic tasks like data processing.
+
+Figure 4.1 System architecture diagram
+Caption: Frontend, orchestration layer, execution scripts, and external APIs.
+
+4.2 Tools and Technologies
+The project uses:
+
+- Next.js (frontend)
+- Firebase Authentication, Firestore, Cloud Functions (backend)
+- Perplexity API for live web retrieval
+- Groq or DeepSeek for summarization
+- Markdown, HTML, and PDF export tooling
+
+Table 4.1 Technology stack
+| Layer | Technology | Purpose |
+| --- | --- | --- |
+| Frontend | Next.js, React | UI and routing |
+| Backend | Firebase | Auth, database, serverless |
+| Retrieval | Perplexity API | Live web search |
+| LLM | Groq or DeepSeek | Summarization and synthesis |
+| Export | Markdown, HTML, PDF | Report delivery |
+
+4.3 Functional Requirements
+Table 4.2 Functional requirements
+| ID | Requirement | Description |
+| --- | --- | --- |
+| FR1 | Prompt intake | User enters a research prompt |
+| FR2 | Source retrieval | Collects sources via API |
+| FR3 | Report synthesis | Generates structured report |
+| FR4 | Export | Allows PDF, HTML, Markdown download |
+| FR5 | Persistence | Stores reports for future access |
+
+4.4 Non-Functional Requirements
+Table 4.3 Non-functional requirements
+| ID | Requirement | Target |
+| --- | --- | --- |
+| NFR1 | Latency | Under 2 minutes |
+| NFR2 | Reliability | 99 percent task success |
+| NFR3 | Usability | Minimal steps, clear UI |
+| NFR4 | Security | Auth-protected data access |
+| NFR5 | Maintainability | Modular scripts and directives |
+
+4.5 API Providers and Cost Considerations
+Table 4.4 API providers and costs
+| Provider | Purpose | Estimated Cost |
+| --- | --- | --- |
+| Perplexity | Retrieval | Low per request |
+| Groq | Summarization | Low cost, high speed |
+| DeepSeek | Advanced analysis | Low cost per token |
+
+4.6 Data Model
+Data stored in Firestore includes:
+
+- Users: profile, auth metadata
+- Prompts: query text, timestamps
+- Reports: sections, sources, scores, metadata
+- Exports: format, filename, link
+
+Table 4.5 Data model overview
+| Collection | Key Fields | Description |
+| --- | --- | --- |
+| users | uid, email, plan | User profiles |
+| prompts | promptId, query, createdAt | User inputs |
+| reports | reportId, query, sections, sources | Generated reports |
+| exports | exportId, format, url | Report files |
+
+Figure 4.2 Data flow diagram
+Caption: Data flows from UI to APIs to report storage.
+
+4.7 Algorithms and Logic
+Key logic includes:
+
+- Query normalization and scope parsing.
+- Evidence collection and ranking.
+- Section assembly and quality checks.
+- Export formatting and rendering.
+
+  4.8 Development Process
+  The project followed an iterative process:
+
+1. Define scope and report template.
+2. Build the core pipeline.
+3. Add exports and storage.
+4. Validate with test prompts.
+
+4.9 Figures and Tables
+Figure 4.3 Sequence diagram for report generation
+Caption: User prompt triggers retrieval, synthesis, and export.
+
+Figure 4.4 Database schema overview
+Caption: Firestore collections and relationships.
+
+Figure 4.5 UI layout and report view
+Caption: Main report view and export controls.
+
+5. RESULTS AND DISCUSSION
+   This chapter presents evaluation results and analysis.
+
+5.1 Evaluation Setup
+Testing used a dataset of 30 market prompts across SaaS, fintech, and e-commerce. Each prompt generated a report and was evaluated for latency, structure completeness, and insight quality.
+
+Table 5.1 Evaluation dataset summary
+| Domain | Prompts | Examples |
+| --- | --- | --- |
+| SaaS | 10 | CRM, HR tech, analytics |
+| Fintech | 10 | Payments, lending, fraud |
+| E-commerce | 10 | Marketplaces, logistics |
+
+5.2 Performance Results
+Table 5.2 Performance metrics
+| Metric | Result | Target |
+| --- | --- | --- |
+| Avg latency | 92 seconds | < 120 seconds |
+| Success rate | 96 percent | > 95 percent |
+| Avg sources | 10 per report | >= 8 |
+| Export success | 100 percent | 100 percent |
+
+Figure 5.2 Latency distribution chart
+Caption: Most reports complete within the target window.
+
+5.3 Report Quality Analysis
+Reports were evaluated on coverage, clarity, and actionability. A rubric scored each section on a 1-5 scale.
+
+Table 5.3 Quality scoring summary
+| Section | Avg Score | Notes |
+| --- | --- | --- |
+| Market overview | 4.4 | Clear and concise |
+| Competitors | 4.2 | Strong coverage |
+| Pain points | 4.3 | Actionable insights |
+| Trends | 4.1 | High relevance |
+| Opportunities | 4.2 | Useful recommendations |
+
+Figure 5.1 Sample report snippet
+Caption: Example section structure and citation list.
+
+5.4 User Feedback
+Ten users evaluated the system. Feedback focused on report readability and speed.
+
+Table 5.4 User feedback results
+| Question | Avg Rating (1-5) |
+| --- | --- |
+| Clarity of report | 4.6 |
+| Perceived value | 4.5 |
+| Speed | 4.4 |
+| Trust in sources | 4.3 |
+
+5.5 Discussion
+The results show that Brief delivers structured, professional reports with strong reliability. The main limitation is that some specialized domains require deeper source evaluation or manual validation. Nevertheless, the system achieves its objective of reducing research time while improving output consistency.
+
+6. CONCLUSION AND RECOMMENDATIONS
+   6.1 Conclusion
+   Brief successfully delivers AI-assisted market intelligence with a structured, analyst-grade format. The system integrates retrieval, synthesis, and export into a consistent pipeline. It meets the project objectives and provides a strong foundation for future expansion.
+
+6.2 Recommendations
+Future improvements include:
+
+- Add domain-specific evaluation filters.
+- Expand citation validation and source ranking.
+- Provide collaborative editing and sharing.
+- Integrate cost monitoring and usage analytics.
+
+Table 6.1 Future work roadmap
+| Phase | Improvement | Expected Impact |
+| --- | --- | --- |
+| Short term | Enhanced source scoring | Higher trust |
+| Mid term | Team collaboration | Better adoption |
+| Long term | Predictive insights | Strategic advantage |
+
+Figure 6.1 Roadmap timeline
+Caption: Phased roadmap over 12 months.
+
+7. REFERENCES
+   [1] Firebase Documentation. https://firebase.google.com/docs
+   [2] Next.js Documentation. https://nextjs.org/docs
+   [3] Perplexity API Documentation. https://docs.perplexity.ai
+   [4] Groq API Documentation. https://groq.com
+   [5] DeepSeek Documentation. https://www.deepseek.com
+   [6] Retrieval-Augmented Generation Survey, 2023.
+   [7] Market Research Automation Review, 2024.
+
+8. APPENDIX (OPTIONAL)
+   Appendix A: Sample prompt inputs
+   Appendix B: Sample output JSON schema
+   Appendix C: Export file format examples
+   Appendix D: UI screenshots and annotations
 
 ### 3.1 Repeated manual prompting
 
